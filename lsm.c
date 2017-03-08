@@ -63,7 +63,11 @@ int put(int key, int value, lsm_tree *tree) {
 int comparison(const void *a, const void *b) {
 	node *aa = (node *) a; 
 	node *bb = (node *) b; 
-	return (aa->key - bb->key);
+	if (aa->key < bb->key) 
+		return -1; 
+	else if (aa->key > bb->key) 
+		return 1; 
+	return 0; 
 }
 
 int push_to_disk(lsm_tree *tree) { 
@@ -159,26 +163,19 @@ void merge_data(node *buf, node *left, node *right, int sz1, int sz2) {
 //                                  GET                                      //
 ///////////////////////////////////////////////////////////////////////////////
 int get(int key, lsm_tree *tree) {
-	printf("---> GET: %d\n", key);
-
+	qsort(tree->block, tree->curr_size, sizeof(node), comparison);
+	tree->is_sorted = 1;
 	// bloom filter???
 	// better to sort before getting????
 	int result; 
 
-    int bot = 0;
-    int top = tree->curr_size - 1;
-    int mid;
-    while(bot <= top){
-         mid = (top + bot)/2;
-         if(key == tree->block[mid].key){
-            printf("%d\n", tree->block[mid].val);
-			return 0;
-         }
-         else if(key < tree->block[mid].key){
-             top = mid - 1;
-         }
-         else
-            bot = mid + 1;
+	node keynode; 
+	keynode.key = key;
+
+    node *found = bsearch(&keynode, tree->block, tree->curr_size, sizeof(node), comparison);
+    if (found) {
+    	printf("%d\n", found->val);
+    	return 0;
     }
 
 	// perhaps on disk!
@@ -196,21 +193,19 @@ int get(int key, lsm_tree *tree) {
 			return -1;
 		}
 
-		result = fread(disk_buffer, sizeof(node), tree->num_written, file); 	
+		result = fread(disk_buffer, sizeof(node), tree->num_written, file); 
+		result = fclose(file);
+		if (result) {
+			perror("File close failed in get");
+			return -1;
+		}	
 
-		for (int i = 0; i < tree->num_written; i++){
-			//DEBUG: printf("[DISK] %d\n", disk_buffer[i].key);
-			if (key == disk_buffer[i].key) {
-				printf("%d\n", disk_buffer[i].val);
-				result = fclose(file);
-				if (result) {
-					perror("File close failed in get");
-					return -1;
-				}
-				return 0;
-			}
-		}
-		fclose(file); 
+		found = bsearch(&keynode, disk_buffer, tree->num_written, sizeof(node), comparison);
+	    if (found) {
+	    	printf("%d\n", found->val);
+	    	return 0;
+	    }
+
 
 	} 
 	// not found
@@ -278,7 +273,7 @@ int delete(int key, lsm_tree *tree) {
 			if (key == disk_buffer[i].key) {
 				disk_buffer[i] = disk_buffer[tree->num_written - 1];
 				tree->num_written--;
-				qsort(disk_buffer, tree->num_written, sizeof(node) * tree->num_written, comparison);
+				qsort(disk_buffer, tree->num_written, sizeof(node), comparison);
 
 				file = fopen("disk.txt", "w");  
 				result = fwrite(disk_buffer, sizeof(node), tree->num_written, file);
