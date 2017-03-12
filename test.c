@@ -34,9 +34,8 @@ int main(int argc, char *argv[]) {
 	int total_gets = 0;
 
 	// for every line
-	time_t start, stop; 
-	time(&start);
-
+	clock_t t = clock();
+   
 	while(fgets(line, sizeof(line), file)) {
 		token = strtok(line, " "); 
 		switch (*token) {
@@ -78,8 +77,8 @@ int main(int argc, char *argv[]) {
 				break;
 		}
 	}
-	time(&stop);
-	float time_elapsed = difftime(stop, start);
+	t = clock() - t;
+	double time_elapsed = ((double)t)/CLOCKS_PER_SEC;
 
 	printf("------------------------------------\n");
 	printf("PUTS %d\n", puts);

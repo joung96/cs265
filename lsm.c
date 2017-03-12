@@ -148,15 +148,19 @@ void merge_data(node *buf, node *left, node *right, int sz1, int sz2) {
 	int j = 0; 
 	int k = 0;
 	while (i < sz1 && j < sz2) {
-		if (left[i].key < right[j].key)
+		if (left[i].key < right[j].key) {
 			buf[k++] = left[i++];
-		else 
+		}
+		else {
 			buf[k++] = right[j++]; 
+		}
 	}
-	while (i < sz1) 
+	while (i < sz1) {
 		buf[k++] = left[i++];
-	while (j < sz2) 
+	}
+	while (j < sz2) {
 		buf[k++] = right[j++];
+	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -165,8 +169,7 @@ void merge_data(node *buf, node *left, node *right, int sz1, int sz2) {
 int get(int key, lsm_tree *tree) {
 	qsort(tree->block, tree->curr_size, sizeof(node), comparison);
 	tree->is_sorted = 1;
-	// bloom filter???
-	// better to sort before getting????
+
 	int result; 
 
 	node keynode; 
@@ -223,6 +226,10 @@ void range(int key1, int key2, lsm_tree *tree){
 		if (key1 <= tree->block[i].key && tree->block[i].key < key2) {
 			none_found = 0;
 			printf("%d:%d\n", tree->block[i].key, tree->block[i].val);
+		}
+		if (tree->block[i].key < key2){
+			printf("\n");
+			return;
 		}
 	}
 	if (none_found)
@@ -343,7 +350,25 @@ int load(const char *filename, lsm_tree *tree) {
 ///////////////////////////////////////////////////////////////////////////////
 //                                PRINT STAT                                 //
 ///////////////////////////////////////////////////////////////////////////////
+int stat(lsm_tree *tree) {
+	int total_pairs = 0; 
+	int level1 = 0; 
 
+	// gather statistics 
+	for (int i = 0; i < tree->curr_size; i ++) {
+		total_pairs++;
+		level1++;
+	}
+
+	// print statistics
+	printf("Total Pairs: %d\n", total_pairs);
+	printf("LV1: %d\n", level1);
+	for (int i = 0; i < tree->curr_size; i ++) {
+		printf("%d:%d:L1 ", tree->block[i].key, tree->block[i].val);
+	}
+	return 0;
+
+}
 
 
 

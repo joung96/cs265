@@ -1,21 +1,27 @@
 #include <stdio.h> 
 #include <stdlib.h>
 
-#define BLOCKSIZE 50
-#define DATASIZE 15
-
+#define BLOCKSIZE 1000
+#define MAX_LEVELS 2
+#define MULTIPIER 2
 
 typedef struct node {
 	int key; 
 	int val;
+	int index; 
 } node;
 
-typedef struct lsm_tree {
-	int capacity; 
+typedef struct block {
+	node *nodes;
+	int capacity;
 	int curr_size;
-	int num_written; // number of nodes written
-	node *block;     //array of nodes
 	int is_sorted:1;
+} block;
+
+typedef struct lsm_tree {
+	int num_written; // number of nodes written
+	struct block *blocks;     //array of blocks
+	int num_curr_blocks;
 } lsm_tree; 
 
 lsm_tree *lsm_init(void);
