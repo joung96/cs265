@@ -10,24 +10,33 @@
 
 lsm_tree *lsm_init(void) {
 	lsm_tree *tree;
+	block *block;
+
+	block->nodes = malloc(sizeof(node) * BLOCKSIZE);
+	block->capacity = BLOCKSIZE; 
+	block->curr_size = 0; 
+	block->is_sorted = 1; 
+
 	tree = malloc(sizeof(lsm_tree));
 	if (!tree) {
 		perror("Initial tree malloc failed");
 		return  NULL;
 	}
 
-	tree->capacity =  BLOCKSIZE;
 	tree->curr_size = 0; 
-	tree->block = malloc(sizeof(node*) * BLOCKSIZE);
-	tree->num_written = 0;
-	tree->is_sorted = 0;
+	tree->blocks = malloc(sizeof(block) * MAX_LEVELS); // array of blocks
+	tree->num_curr_blocks = 1;
 	if (!tree->block) 
 		perror("Initial block malloc failed");
 	return tree;
 }
 
 void lsm_destroy(lsm_tree *tree) { 
-	free(tree->block); 
+	for (int i = 0; i < tree->num_curr_levels; i++) {
+		free(tree->blocks[i]->nodes);
+	}
+
+	free(tree->blocks); 
 	free(tree);
 }
 
