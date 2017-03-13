@@ -1,7 +1,7 @@
 #include <stdio.h> 
 #include <stdlib.h>
 
-#define BLOCKSIZE 1
+#define BLOCKSIZE 100
 #define MAX_LEVELS 2
 #define MULTIPLIER 2
 
@@ -14,7 +14,6 @@ typedef struct block {
 	node *nodes;
 	int capacity;
 	int curr_size;
-	int is_sorted:1;
 } block;
 
 typedef struct lsm_tree {
@@ -33,7 +32,7 @@ int comparison(const void *a, const void *b);
 
 void merge_data(node *buf, node *buf1, node *buf2, int sz1, int sz2);
 
-node* get(int key, lsm_tree *tree);
+int get(int key, lsm_tree *tree);
 
 void lsm_destroy(lsm_tree *tree);
 

@@ -52,7 +52,7 @@ int main(int argc, char *argv[]) {
 			case 'g': 
 				total_gets++;
 				key = atoi(strtok(NULL, " "));
-				if (get(key, tree)) 
+				if (get(key, tree) == 0) 
 					successful_gets++;
 				else 
 					failed_gets++;
@@ -67,12 +67,12 @@ int main(int argc, char *argv[]) {
 					successul_deletes++;
 				break;
 
-			// case 'r': 
-			// 	key = atoi(strtok(NULL, " "));
-			// 	val = atoi(strtok(NULL, " "));
-			// 	range(key, val, tree);
-			// 	ranges++;
-			// 	break;
+			case 'r': 
+				// key = atoi(strtok(NULL, " "));
+				// val = atoi(strtok(NULL, " "));
+				// range(key, val, tree);
+				ranges++;
+				break;
 		}
 	}
 	double time_elapsed = (clock() - t) / CLOCKS_PER_SEC;
@@ -90,6 +90,6 @@ int main(int argc, char *argv[]) {
 	printf("LOADS %d\n", loads);
 	//printf("TIME_ELAPSED %lf\n", time_elapsed);
 
-	//lsm_destroy(tree);
+	//mlsm_destroy(tree);
 	return 0;
 }

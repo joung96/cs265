@@ -1,5 +1,4 @@
 all:
 	touch disk.txt
-	rm disk.txt
-	# rm -r lsm.DSYM
+	rm disk.txt 
 	gcc lsm.c test.c -o lsm -Wall -g
