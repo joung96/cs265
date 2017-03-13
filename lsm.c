@@ -101,7 +101,6 @@ int put(int key, int value, lsm_tree *tree) {
 			merge_data(newnodes, tree->blocks[i].nodes, tree->blocks[i - 1].nodes, 
 				tree->blocks[i].curr_size, tree->blocks[i - 1].curr_size); 
 	
-			//tree->blocks[i].nodes = newnodes;
 			memcpy(tree->blocks[i].nodes, newnodes, sizeof(node) * tree->blocks[i].capacity);
 			free(newnodes);
 			// clear block
@@ -115,7 +114,6 @@ int put(int key, int value, lsm_tree *tree) {
 	// insert into level 0
 	tree->blocks[0].nodes[tree->blocks[0].curr_size] = newnode;
 	tree->blocks[0].curr_size++;
-
 
 	return 0;
 
@@ -297,14 +295,80 @@ int get(int key, lsm_tree *tree) {
 //                                RANGE                                      //
 ///////////////////////////////////////////////////////////////////////////////
 
-// void range(int key1, int key2, lsm_tree *tree){
-// 	for (int key = key1; key < key2; key++) {
-// 		node* found;
-// 		found = get(key, tree); 
-// 		if (found)
-// 			printf("%d:%d", key, found->val);
-// 	}
-// }
+int range(int key1, int key2, lsm_tree *tree){
+	int result; 
+
+	assert(key1 <= key2);
+
+	// array that indicates whether or not we have not found the element
+	int bitmap[key2 - key1];
+	memset(bitmap, 1, sizeof(bitmap));
+
+	qsort(tree->blocks[0].nodes, tree->blocks[0].curr_size, sizeof(node), comparison);
+	for (int i = 0; i < MAX_LEVELS;i++) {
+		for (int j = key1; j < key2; j++) {
+			node keynode;
+			node *found; 
+			keynode.key = j;
+
+			found = bsearch(&keynode, tree->blocks[i].nodes, tree->blocks[i].curr_size, sizeof(node), comparison);
+		    if (found && bitmap[j - key1]) {
+		    	bitmap[j - key1] = 0;
+	    		printf("%d:%d\n", j, found->val);
+	    	}
+	    }
+	}
+
+	// are we done..?
+	int sum = 0;
+	for (int i = key1; i < key2; i++) {
+		sum += bitmap[i - key1];
+	}
+	// yes we are done
+	if (sum == 0)
+		return 0;
+
+	// perhaps on disk!
+	if (access("disk.txt", F_OK) != -1) {
+		FILE *file = fopen("disk.txt", "r"); 
+		if (!file) {
+			perror("file open in get failed");
+			return -1;
+		}
+
+		node *disk_buffer = malloc(tree->num_written * sizeof(node)); 
+		if (!disk_buffer) {
+			perror("Disk buffer malloc failed");
+			fclose(file);
+			return -1;
+		}
+
+		result = fread(disk_buffer, sizeof(node), tree->num_written, file); 
+
+		result = fclose(file);
+		if (result) {
+			free(disk_buffer);
+			perror("File close failed in get");
+			return -1;
+		}	
+
+		for (int j = key1; j < key2; j++) {
+			node keynode;
+			node *found; 
+			keynode.key = j;
+
+			found = bsearch(&keynode, disk_buffer, tree->num_written, sizeof(node), comparison);
+		    if (found && bitmap[j - key1]) {
+		    	bitmap[j - key1] = 0;
+	    		printf("%d:%d\n", j, found->val);
+	    	}
+	    }
+
+	    free(disk_buffer);
+	} 
+	// not found
+	return 0;
+}
 
 
 ///////////////////////////////////////////////////////////////////////////////

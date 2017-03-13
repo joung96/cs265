@@ -1,8 +1,8 @@
 #include <stdio.h> 
 #include <stdlib.h>
 
-#define BLOCKSIZE 100
-#define MAX_LEVELS 2
+#define BLOCKSIZE 1
+#define MAX_LEVELS 5
 #define MULTIPLIER 2
 
 typedef struct node {
@@ -36,6 +36,6 @@ int get(int key, lsm_tree *tree);
 
 void lsm_destroy(lsm_tree *tree);
 
-void range(int key1, int key2, lsm_tree *tree);
+int range(int key1, int key2, lsm_tree *tree);
 
 int delete(int key, lsm_tree *tree);

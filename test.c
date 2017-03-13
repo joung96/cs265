@@ -68,9 +68,9 @@ int main(int argc, char *argv[]) {
 				break;
 
 			case 'r': 
-				// key = atoi(strtok(NULL, " "));
-				// val = atoi(strtok(NULL, " "));
-				// range(key, val, tree);
+				key = atoi(strtok(NULL, " "));
+				val = atoi(strtok(NULL, " "));
+				range(key, val, tree);
 				ranges++;
 				break;
 		}
