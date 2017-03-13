@@ -1,14 +1,13 @@
 #include <stdio.h> 
 #include <stdlib.h>
 
-#define BLOCKSIZE 1000
+#define BLOCKSIZE 1
 #define MAX_LEVELS 2
-#define MULTIPIER 2
+#define MULTIPLIER 2
 
 typedef struct node {
 	int key; 
 	int val;
-	int index; 
 } node;
 
 typedef struct block {
@@ -34,7 +33,7 @@ int comparison(const void *a, const void *b);
 
 void merge_data(node *buf, node *buf1, node *buf2, int sz1, int sz2);
 
-int get(int key, lsm_tree *tree);
+node* get(int key, lsm_tree *tree);
 
 void lsm_destroy(lsm_tree *tree);
 

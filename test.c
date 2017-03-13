@@ -9,8 +9,6 @@
 int main(int argc, char *argv[]) {
 
 	lsm_tree *tree = lsm_init();
-	assert(tree);
-	assert(tree->block);
 	int result; 
 
 	const char *filename = argv[1]; 
@@ -43,18 +41,18 @@ int main(int argc, char *argv[]) {
 				key = atoi(strtok(NULL, " "));
 				val = atoi(strtok(NULL, " "));
 				result = put(key, val, tree);
-				if (!result)
+				if (result >= 0)
 					puts++; 
 				else {
 					printf("FAILED PUT!");
+					return -1;
 				}
 				break;
 
 			case 'g': 
 				total_gets++;
 				key = atoi(strtok(NULL, " "));
-				result = get(key, tree);
-				if (result == 0) 
+				if (get(key, tree)) 
 					successful_gets++;
 				else 
 					failed_gets++;
@@ -69,16 +67,17 @@ int main(int argc, char *argv[]) {
 					successul_deletes++;
 				break;
 
-			case 'r': 
-				key = atoi(strtok(NULL, " "));
-				val = atoi(strtok(NULL, " "));
-				range(key, val, tree);
-				ranges++;
-				break;
+			// case 'r': 
+			// 	key = atoi(strtok(NULL, " "));
+			// 	val = atoi(strtok(NULL, " "));
+			// 	range(key, val, tree);
+			// 	ranges++;
+			// 	break;
 		}
 	}
-	t = clock() - t;
-	double time_elapsed = ((double)t)/CLOCKS_PER_SEC;
+	double time_elapsed = (clock() - t) / CLOCKS_PER_SEC;
+
+	fclose(file);
 
 	printf("------------------------------------\n");
 	printf("PUTS %d\n", puts);
@@ -89,7 +88,8 @@ int main(int argc, char *argv[]) {
 	printf("SUCCESSFUL_DELS %d\n", successul_deletes);
 	printf("FAILED_DELS %d\n", failed_deletes);
 	printf("LOADS %d\n", loads);
-	printf("TIME_ELAPSED %f\n", time_elapsed);
+	//printf("TIME_ELAPSED %lf\n", time_elapsed);
 
+	//lsm_destroy(tree);
 	return 0;
 }
