@@ -328,7 +328,7 @@ int range(int key1, int key2, lsm_tree *tree){
 	if (sum == 0)
 		return 0;
 
-	// perhaps on disk!
+	// perhaps the rest are on disk!
 	if (access("disk.txt", F_OK) != -1) {
 		FILE *file = fopen("disk.txt", "r"); 
 		if (!file) {
@@ -491,26 +491,35 @@ int load(const char *filename, lsm_tree *tree) {
 
 ///////////////////////////////////////////////////////////////////////////////
 //                                PRINT STAT                                 //
-///////////////////////////////////////////////////////////////////////////////
-// int stat(lsm_tree *tree) {
-// 	int total_pairs = 0; 
-// 	int level1 = 0; 
+/////////////////////////////////////////////////////////////////////////////
+int stat(lsm_tree *tree) {
+	int total_pairs = 0; 
 
-// 	// gather statistics 
-// 	for (int i = 0; i < tree->curr_size; i ++) {
-// 		total_pairs++;
-// 		level1++;
-// 	}
+	// gather statistics 
+	for (int i = 0; i < MAX_LEVELS; i ++) {
+		total_pairs += tree->blocks[i].curr_size;
+	}
 
-// 	// print statistics
-// 	printf("Total Pairs: %d\n", total_pairs);
-// 	printf("LV1: %d\n", level1);
-// 	for (int i = 0; i < tree->curr_size; i ++) {
-// 		printf("%d:%d:L1 ", tree->block[i].key, tree->block[i].val);
-// 	}
-// 	return 0;
+	// print statistics
+	printf("Total Pairs: %d\n", total_pairs);
 
-// }
+	for (int i = 0; i < MAX_LEVELS; i++) {
+		if (tree->blocks[i].curr_size != 0) {
+			printf("LVL%d: %d", i + 1, tree->blocks[i].curr_size);
+		}
+	}
+	printf("\n");
+
+	for (int i = 0; i < MAX_LEVELS; i++) {
+		for(int j = 0; j < tree->blocks[i].curr_size; j++) {
+			printf("%d:%d:%d ", tree->blocks[i].nodes[j].key,
+				tree->blocks[i].nodes[j].val, i + 1);
+		}
+		printf("\n");
+	}
+
+	return 0;
+}
 
 
 

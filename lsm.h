@@ -1,7 +1,7 @@
 #include <stdio.h> 
 #include <stdlib.h>
 
-#define BLOCKSIZE 1
+#define BLOCKSIZE 1000
 #define MAX_LEVELS 5
 #define MULTIPLIER 2
 
@@ -39,3 +39,5 @@ void lsm_destroy(lsm_tree *tree);
 int range(int key1, int key2, lsm_tree *tree);
 
 int delete(int key, lsm_tree *tree);
+
+int stat(lsm_tree *tree);

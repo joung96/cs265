@@ -89,6 +89,7 @@ int main(int argc, char *argv[]) {
 	printf("FAILED_DELS %d\n", failed_deletes);
 	printf("LOADS %d\n", loads);
 	//printf("TIME_ELAPSED %lf\n", time_elapsed);
+	stat(tree);
 
 	//mlsm_destroy(tree);
 	return 0;
