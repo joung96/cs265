@@ -38,7 +38,7 @@ lsm_tree *lsm_init(void) {
 }
 
 void lsm_destroy(lsm_tree *tree) { 
-	for (int i = 0; i < tree->num_curr_blocks; i++) {
+	for (int i = 0; i < MAX_LEVELS; i++) {
 		free(tree->blocks[i].nodes);
 	}
 
@@ -89,8 +89,8 @@ int put(int key, int value, lsm_tree *tree) {
 				for (int k = 0; k < tree->blocks[i - 1].curr_size; k++) {
 					if (tree->blocks[i].nodes[j].key == tree->blocks[i - 1].nodes[k].key) {
 						// delete the entry in level i 
-						tree->blocks[i].nodes[j] = tree->blocks[i].nodes[tree->blocks[i].curr_size];
-						qsort(tree->blocks[i].nodes, tree->blocks[i].curr_size, sizeof(node), comparison);
+						memmove(&tree->blocks[i].nodes[j], &tree->blocks[i].nodes[j + 1], sizeof(node) * (tree->blocks[i].curr_size - j));
+
 						tree->blocks[i].curr_size--;
 					}
 				}
@@ -112,6 +112,7 @@ int put(int key, int value, lsm_tree *tree) {
 	}
 
 	// insert into level 0
+	// TODO delete duplicates here
 	tree->blocks[0].nodes[tree->blocks[0].curr_size] = newnode;
 	tree->blocks[0].curr_size++;
 
@@ -164,9 +165,8 @@ int push_to_disk(lsm_tree *tree) {
 			for (int k = 0; k < tree->blocks[MAX_LEVELS - 1].curr_size; k++) {
 				if (disk_buffer[j].key == tree->blocks[MAX_LEVELS - 1].nodes[k].key) {
 					// delete the entry on disk
-					disk_buffer[j] = disk_buffer[tree->num_written];
+					memmove(&disk_buffer[j], &disk_buffer[j + 1], sizeof(node) * (tree->num_written - j));
 					tree->num_written--;
-					qsort(disk_buffer, tree->num_written, sizeof(node), comparison);
 				}
 			}
 		}
@@ -203,7 +203,6 @@ int push_to_disk(lsm_tree *tree) {
 
 	result = fclose(file); 
 	if (result) {
-		fclose(file); 
 		perror("file close failed 2"); 
 		return -1;
 	}
@@ -221,19 +220,15 @@ void merge_data(node *buf, node *left, node *right, int sz1, int sz2) {
 	int j = 0; 
 	int k = 0;
 	while (i < sz1 && j < sz2) {
-		if (left[i].key < right[j].key) {
+		if (left[i].key < right[j].key) 
 			buf[k++] = left[i++];
-		}
-		else {
+		else 
 			buf[k++] = right[j++]; 
-		}
 	}
-	while (i < sz1) {
+	while (i < sz1) 
 		buf[k++] = left[i++];
-	}
-	while (j < sz2) {
+	while (j < sz2) 
 		buf[k++] = right[j++];
-	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -245,11 +240,12 @@ int get(int key, lsm_tree *tree) {
 	node *found; 
 	keynode.key = key;
 
+	// TODO figure out sorts
 	qsort(tree->blocks[0].nodes, tree->blocks[0].curr_size, sizeof(node), comparison);
 	for (int i = 0; i < MAX_LEVELS;i++) {
 		found = bsearch(&keynode, tree->blocks[i].nodes, tree->blocks[i].curr_size, sizeof(node), comparison);
 	    if (found) {
-    		//printf("%d\n", found->val);
+    		printf("%d\n", found->val);
     		return 0;
     	}
 
@@ -280,14 +276,14 @@ int get(int key, lsm_tree *tree) {
 
 		found = bsearch(&keynode, disk_buffer, tree->num_written, sizeof(node), comparison);
 	    if (found) {
-	    	//printf("%d\n", found->val);
+	    	printf("%d\n", found->val);
 	    	free(disk_buffer);
 	    	return 0;
 	    }
 	    free(disk_buffer);
 	} 
 	// not found
-	//printf("\n");
+	printf("\n");
 	return -1;
 }
 
@@ -301,8 +297,9 @@ int range(int key1, int key2, lsm_tree *tree){
 	assert(key1 <= key2);
 
 	// array that indicates whether or not we have not found the element
-	int bitmap[key2 - key1];
-	memset(bitmap, 1, sizeof(bitmap));
+	int *bitmap = malloc(sizeof(int) * (key2 - key1));
+	for (int i = 0; i < (key2 - key1); i++) 
+		bitmap[i] = 1; 
 
 	qsort(tree->blocks[0].nodes, tree->blocks[0].curr_size, sizeof(node), comparison);
 	for (int i = 0; i < MAX_LEVELS;i++) {
@@ -325,20 +322,24 @@ int range(int key1, int key2, lsm_tree *tree){
 		sum += bitmap[i - key1];
 	}
 	// yes we are done
-	if (sum == 0)
+	if (sum == 0) {
+		free(bitmap);
 		return 0;
+	}
 
 	// perhaps the rest are on disk!
 	if (access("disk.txt", F_OK) != -1) {
 		FILE *file = fopen("disk.txt", "r"); 
 		if (!file) {
 			perror("file open in get failed");
+			free(bitmap);
 			return -1;
 		}
 
 		node *disk_buffer = malloc(tree->num_written * sizeof(node)); 
 		if (!disk_buffer) {
 			perror("Disk buffer malloc failed");
+			free(bitmap);
 			fclose(file);
 			return -1;
 		}
@@ -348,6 +349,7 @@ int range(int key1, int key2, lsm_tree *tree){
 		result = fclose(file);
 		if (result) {
 			free(disk_buffer);
+			free(bitmap);
 			perror("File close failed in get");
 			return -1;
 		}	
@@ -367,6 +369,7 @@ int range(int key1, int key2, lsm_tree *tree){
 	    free(disk_buffer);
 	} 
 	// not found
+	free(bitmap);
 	return 0;
 }
 
@@ -381,9 +384,9 @@ int delete(int key, lsm_tree *tree) {
 	for (int i = 0; i < MAX_LEVELS; i++) {
 		for (int j = 0; j < tree->blocks[i].curr_size; j++) {
 			if (key == tree->blocks[i].nodes[j].key) {
-				tree->blocks[i].nodes[j] = tree->blocks[i].nodes[tree->blocks[i].curr_size - 1];
+
+				memmove(&tree->blocks[i].nodes[j], &tree->blocks[i].nodes[j + 1], sizeof(node) * (tree->blocks[i].curr_size - j));
 				tree->blocks[i].curr_size--; 
-				qsort(tree->blocks[i].nodes, tree->blocks[i].curr_size, sizeof(node), comparison);
 				return 0;
 			}
 		}
@@ -452,8 +455,8 @@ int load(const char *filename, lsm_tree *tree) {
 	int result; 
 
 	FILE *file = fopen(filename, "rb");
-	// what if file is NULL; 
 	if (!file) {
+		perror("merp");
 		return -1;
 	}
 	fseek(file, 0, SEEK_END); 

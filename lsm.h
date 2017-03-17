@@ -19,7 +19,6 @@ typedef struct block {
 typedef struct lsm_tree {
 	int num_written; // number of nodes written
 	struct block *blocks;     //array of blocks
-	int num_curr_blocks;
 } lsm_tree; 
 
 lsm_tree *lsm_init(void);
@@ -41,3 +40,5 @@ int range(int key1, int key2, lsm_tree *tree);
 int delete(int key, lsm_tree *tree);
 
 int stat(lsm_tree *tree);
+
+int load(const char *filename, lsm_tree *tree);

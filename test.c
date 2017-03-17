@@ -19,6 +19,7 @@ int main(int argc, char *argv[]) {
 	}
 	char line[50]; 
 	char *token; 
+	char *loadfile;
 	int key; 
 	int val;
 
@@ -73,6 +74,12 @@ int main(int argc, char *argv[]) {
 				range(key, val, tree);
 				ranges++;
 				break;
+
+			case 'l': 
+				loadfile = strtok(NULL, " ");
+				load(loadfile, tree);
+				loads++;
+				break;
 		}
 	}
 	double time_elapsed = (clock() - t) / CLOCKS_PER_SEC;
@@ -88,9 +95,7 @@ int main(int argc, char *argv[]) {
 	printf("SUCCESSFUL_DELS %d\n", successul_deletes);
 	printf("FAILED_DELS %d\n", failed_deletes);
 	printf("LOADS %d\n", loads);
-	//printf("TIME_ELAPSED %lf\n", time_elapsed);
-	stat(tree);
+	printf("TIME_ELAPSED %lf\n", time_elapsed);
 
-	//mlsm_destroy(tree);
 	return 0;
 }
