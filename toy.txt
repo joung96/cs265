@@ -1,5 +1,3 @@
-l "0.dat"
+l "/Users/pikachu/Documents/Junior/CS265/cs265-sysproj/0.dat"
 r 994957275 2082945813
 d 1213834231
-
-l "0.dat"

@@ -10,7 +10,7 @@
 //                                  LSM                                      //
 ///////////////////////////////////////////////////////////////////////////////
 
-lsm_tree *lsm_init(void) {
+lsm_tree *lsm_init(int blocksize, int multiplier, int maxlevels) {
 	lsm_tree *tree;
 	block *block;
 
@@ -20,10 +20,10 @@ lsm_tree *lsm_init(void) {
 		return  NULL;
 	}
 
-	tree->blocks = malloc(sizeof(block) * sizeof(node) * MAX_LEVELS);
+	tree->blocks = malloc(sizeof(block) * sizeof(node) * maxlevels);
 
-	for (int i = 0; i < MAX_LEVELS; i++) {
-		int capacity = BLOCKSIZE * pow(MULTIPLIER, i);
+	for (int i = 0; i < maxlevels; i++) {
+		int capacity = blocksize * pow(multiplier, i);
 		tree->blocks[i].nodes = malloc(sizeof(node) * capacity);
 		if (!tree->blocks[i].nodes) {
 			perror("Tree node list malloc failed");
@@ -33,12 +33,13 @@ lsm_tree *lsm_init(void) {
 		tree->blocks[i].curr_size = 0;
 	}
 	tree->num_written = 0;
+	tree->maxlevels = maxlevels; 
 
 	return tree;
 }
 
 void lsm_destroy(lsm_tree *tree) { 
-	for (int i = 0; i < MAX_LEVELS; i++) {
+	for (int i = 0; i < tree->maxlevels; i++) {
 		free(tree->blocks[i].nodes);
 	}
 
@@ -62,7 +63,7 @@ int put(int key, int value, lsm_tree *tree) {
 	// first level is full!
 	if (tree->blocks[0].curr_size == tree->blocks[0].capacity) {
 		i = 1; 
-		while(i < MAX_LEVELS) {
+		while(i < tree->maxlevels) {
 			sum = tree->blocks[i].curr_size + tree->blocks[i - 1].curr_size;
 			if (sum <= tree->blocks[i].capacity)
 				break;
@@ -72,7 +73,7 @@ int put(int key, int value, lsm_tree *tree) {
 		// push changes throughout table
 		// sort node lists
 		qsort(tree->blocks[i - 1].nodes, tree->blocks[i - 1].curr_size, sizeof(node), comparison);
-		if (i == MAX_LEVELS) {
+		if (i == tree->maxlevels) {
 			result = push_to_disk(tree);
 			if (result != 0) {
 				perror("Push to disk failed");
@@ -151,7 +152,7 @@ int push_to_disk(lsm_tree *tree) {
 
 		fread(disk_buffer, sizeof(node), tree->num_written, file); 
 
-		all_data_buffer = malloc(sizeof(node) * (tree->num_written + tree->blocks[MAX_LEVELS - 1].curr_size));
+		all_data_buffer = malloc(sizeof(node) * (tree->num_written + tree->blocks[tree->maxlevels - 1].curr_size));
 		if (!all_data_buffer) {
 			fclose(file);
 			free(disk_buffer); 
@@ -162,8 +163,8 @@ int push_to_disk(lsm_tree *tree) {
 
 		// remove duplicates
 		for (int j = 0; j < tree->num_written; j++) {
-			for (int k = 0; k < tree->blocks[MAX_LEVELS - 1].curr_size; k++) {
-				if (disk_buffer[j].key == tree->blocks[MAX_LEVELS - 1].nodes[k].key) {
+			for (int k = 0; k < tree->blocks[tree->maxlevels - 1].curr_size; k++) {
+				if (disk_buffer[j].key == tree->blocks[tree->maxlevels - 1].nodes[k].key) {
 					// delete the entry on disk
 					memmove(&disk_buffer[j], &disk_buffer[j + 1], sizeof(node) * (tree->num_written - j));
 					tree->num_written--;
@@ -171,8 +172,8 @@ int push_to_disk(lsm_tree *tree) {
 			}
 		}
 
-		merge_data(all_data_buffer, disk_buffer, tree->blocks[MAX_LEVELS - 1].nodes, 
-			       tree->num_written, tree->blocks[MAX_LEVELS - 1].curr_size);
+		merge_data(all_data_buffer, disk_buffer, tree->blocks[tree->maxlevels - 1].nodes, 
+			       tree->num_written, tree->blocks[tree->maxlevels - 1].curr_size);
 
 		result = fclose(file); 
 		if (result) {
@@ -185,10 +186,10 @@ int push_to_disk(lsm_tree *tree) {
 	// file DNE 
 	file = fopen("disk.txt", "w");  
 	if (! all_data_buffer) {
-		all_data_buffer = tree->blocks[MAX_LEVELS - 1].nodes;
+		all_data_buffer = tree->blocks[tree->maxlevels - 1].nodes;
 	}
 	result = fwrite(all_data_buffer, sizeof(node), 
-		(tree->num_written + tree->blocks[MAX_LEVELS - 1].curr_size), file);
+		(tree->num_written + tree->blocks[tree->maxlevels - 1].curr_size), file);
 
 	if(need_to_free)
 		free(all_data_buffer); 
@@ -207,8 +208,8 @@ int push_to_disk(lsm_tree *tree) {
 		return -1;
 	}
 	
-	tree->num_written += tree->blocks[MAX_LEVELS - 1].curr_size;
-	tree->blocks[MAX_LEVELS - 1].curr_size = 0;
+	tree->num_written += tree->blocks[tree->maxlevels - 1].curr_size;
+	tree->blocks[tree->maxlevels - 1].curr_size = 0;
 
 	return 0; 
 }
@@ -242,10 +243,10 @@ int get(int key, lsm_tree *tree) {
 
 	// TODO figure out sorts
 	qsort(tree->blocks[0].nodes, tree->blocks[0].curr_size, sizeof(node), comparison);
-	for (int i = 0; i < MAX_LEVELS;i++) {
+	for (int i = 0; i < tree->maxlevels;i++) {
 		found = bsearch(&keynode, tree->blocks[i].nodes, tree->blocks[i].curr_size, sizeof(node), comparison);
 	    if (found) {
-    		printf("%d\n", found->val);
+    		//printf("%d\n", found->val);
     		return 0;
     	}
 
@@ -276,14 +277,14 @@ int get(int key, lsm_tree *tree) {
 
 		found = bsearch(&keynode, disk_buffer, tree->num_written, sizeof(node), comparison);
 	    if (found) {
-	    	printf("%d\n", found->val);
+	    	//printf("%d\n", found->val);
 	    	free(disk_buffer);
 	    	return 0;
 	    }
 	    free(disk_buffer);
 	} 
 	// not found
-	printf("\n");
+	//printf("\n");
 	return -1;
 }
 
@@ -291,87 +292,86 @@ int get(int key, lsm_tree *tree) {
 //                                RANGE                                      //
 ///////////////////////////////////////////////////////////////////////////////
 
-int range(int key1, int key2, lsm_tree *tree){
-	int result; 
+// int range(int key1, int key2, lsm_tree *tree){
+// 	int result; 
 
-	assert(key1 <= key2);
+// 	assert(key1 <= key2);
+// 	qsort(tree->blocks[0].nodes, tree->blocks[0].curr_size, sizeof(node), comparison);
 
-	// array that indicates whether or not we have not found the element
-	int *bitmap = malloc(sizeof(int) * (key2 - key1));
-	for (int i = 0; i < (key2 - key1); i++) 
-		bitmap[i] = 1; 
+// 	// array that indicates whether or not we have not found the element
+// 	char *bitmap = malloc(sizeof(char) * (key2 - key1));
+// 	for (int i = 0; i < (key2 - key1); i++) 
+// 		bitmap[i] = 'o'; 
 
-	qsort(tree->blocks[0].nodes, tree->blocks[0].curr_size, sizeof(node), comparison);
-	for (int i = 0; i < MAX_LEVELS;i++) {
-		for (int j = key1; j < key2; j++) {
-			node keynode;
-			node *found; 
-			keynode.key = j;
+// 	for (int i = 0; i < tree->maxlevels;i++) {
+// 		for (int j = 0; j < tree->blocks[i].curr_size; j++) {
+// 			if (tree->blocks[i].nodes[j].key >= key2)
+// 				break;
+// 			if (tree->blocks[i].nodes[j].key >= key1) {
+// 				if (bitmap[key2 - tree->blocks[i].nodes[j].key] == 'o') {
+// 					bitmap[key2 - tree->blocks[i].nodes[j].key] = 'x';
+// 		    		printf("%d:%d\n", tree->blocks[i].nodes[j].key, tree->blocks[i].nodes[j].val);
+// 				}
+// 			}
+// 		}
+// 	}
 
-			found = bsearch(&keynode, tree->blocks[i].nodes, tree->blocks[i].curr_size, sizeof(node), comparison);
-		    if (found && bitmap[j - key1]) {
-		    	bitmap[j - key1] = 0;
-	    		printf("%d:%d\n", j, found->val);
-	    	}
-	    }
-	}
+// 	// are we done..?
+// 	int sum = 0;
+// 	for (int i = key1; i < key2; i++) {
+// 		sum += bitmap[i - key1];
+// 	}
+// 	// yes we are done
+// 	if (sum == 0) {
+// 		free(bitmap);
+// 		return 0;
+// 	}
 
-	// are we done..?
-	int sum = 0;
-	for (int i = key1; i < key2; i++) {
-		sum += bitmap[i - key1];
-	}
-	// yes we are done
-	if (sum == 0) {
-		free(bitmap);
-		return 0;
-	}
+// 	// perhaps the rest are on disk!
+// 	if (access("disk.txt", F_OK) != -1) {
+// 		FILE *file = fopen("disk.txt", "r"); 
+// 		if (!file) {
+// 			perror("file open in get failed");
+// 			free(bitmap);
+// 			return -1;
+// 		}
 
-	// perhaps the rest are on disk!
-	if (access("disk.txt", F_OK) != -1) {
-		FILE *file = fopen("disk.txt", "r"); 
-		if (!file) {
-			perror("file open in get failed");
-			free(bitmap);
-			return -1;
-		}
+// 		node *disk_buffer = malloc(tree->num_written * sizeof(node)); 
+// 		if (!disk_buffer) {
+// 			perror("Disk buffer malloc failed");
+// 			free(bitmap);
+// 			fclose(file);
+// 			return -1;
+// 		}
 
-		node *disk_buffer = malloc(tree->num_written * sizeof(node)); 
-		if (!disk_buffer) {
-			perror("Disk buffer malloc failed");
-			free(bitmap);
-			fclose(file);
-			return -1;
-		}
+// 		result = fread(disk_buffer, sizeof(node), tree->num_written, file); 
 
-		result = fread(disk_buffer, sizeof(node), tree->num_written, file); 
+// 		result = fclose(file);
+// 		if (result) {
+// 			free(disk_buffer);
+// 			free(bitmap);
+// 			perror("File close failed in get");
+// 			return -1;
+// 		}	
 
-		result = fclose(file);
-		if (result) {
-			free(disk_buffer);
-			free(bitmap);
-			perror("File close failed in get");
-			return -1;
-		}	
+// 		for (int i = 0; i < tree->num_written;i++) {
+// 			if (disk_buffer[i].key >= key2)
+// 				break;
+// 			if (disk_buffer[i].key >= key1) {
+// 				if (bitmap[key2 - disk_buffer[i].key] == 'o') {
+// 					bitmap[key2 - disk_buffer[i].key] = 'x';
+// 		    		printf("%d:%d\n", disk_buffer[i].key, disk_buffer[i].val);
+// 				}
+// 			}
+// 		}
 
-		for (int j = key1; j < key2; j++) {
-			node keynode;
-			node *found; 
-			keynode.key = j;
 
-			found = bsearch(&keynode, disk_buffer, tree->num_written, sizeof(node), comparison);
-		    if (found && bitmap[j - key1]) {
-		    	bitmap[j - key1] = 0;
-	    		printf("%d:%d\n", j, found->val);
-	    	}
-	    }
-
-	    free(disk_buffer);
-	} 
-	// not found
-	free(bitmap);
-	return 0;
-}
+// 	    free(disk_buffer);
+// 	} 
+// 	// not found
+// 	free(bitmap);
+// 	return 0;
+// }
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -381,7 +381,7 @@ int range(int key1, int key2, lsm_tree *tree){
 int delete(int key, lsm_tree *tree) {
 	// in memory
 
-	for (int i = 0; i < MAX_LEVELS; i++) {
+	for (int i = 0; i < tree->maxlevels; i++) {
 		for (int j = 0; j < tree->blocks[i].curr_size; j++) {
 			if (key == tree->blocks[i].nodes[j].key) {
 
@@ -499,21 +499,21 @@ int stat(lsm_tree *tree) {
 	int total_pairs = 0; 
 
 	// gather statistics 
-	for (int i = 0; i < MAX_LEVELS; i ++) {
+	for (int i = 0; i < tree->maxlevels; i ++) {
 		total_pairs += tree->blocks[i].curr_size;
 	}
 
 	// print statistics
 	printf("Total Pairs: %d\n", total_pairs);
 
-	for (int i = 0; i < MAX_LEVELS; i++) {
+	for (int i = 0; i < tree->maxlevels; i++) {
 		if (tree->blocks[i].curr_size != 0) {
-			printf("LVL%d: %d", i + 1, tree->blocks[i].curr_size);
+			printf("LVL%d: %d ", i + 1, tree->blocks[i].curr_size);
 		}
 	}
 	printf("\n");
 
-	for (int i = 0; i < MAX_LEVELS; i++) {
+	for (int i = 0; i < tree->maxlevels; i++) {
 		for(int j = 0; j < tree->blocks[i].curr_size; j++) {
 			printf("%d:%d:%d ", tree->blocks[i].nodes[j].key,
 				tree->blocks[i].nodes[j].val, i + 1);

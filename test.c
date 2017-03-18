@@ -7,11 +7,14 @@
 
 
 int main(int argc, char *argv[]) {
+	int blocksize = atoi(argv[1]); 
+	int multiplier = atoi(argv[2]); 
+	int maxlevels = atoi(argv[3]);
 
-	lsm_tree *tree = lsm_init();
+	lsm_tree *tree = lsm_init(blocksize, multiplier, maxlevels);
 	int result; 
 
-	const char *filename = argv[1]; 
+	const char *filename = argv[4]; 
 	FILE *file = fopen(filename, "r"); // check res
 	if (!file) {
 		perror("File was NULL");
@@ -33,7 +36,6 @@ int main(int argc, char *argv[]) {
 	int total_gets = 0;
 
 	// for every line
-	clock_t t = clock();
    
 	while(fgets(line, sizeof(line), file)) {
 		token = strtok(line, " "); 
@@ -69,9 +71,9 @@ int main(int argc, char *argv[]) {
 				break;
 
 			case 'r': 
-				key = atoi(strtok(NULL, " "));
-				val = atoi(strtok(NULL, " "));
-				range(key, val, tree);
+				// key = atoi(strtok(NULL, " "));
+				// val = atoi(strtok(NULL, " "));
+				// range(key, val, tree);
 				ranges++;
 				break;
 
@@ -82,7 +84,6 @@ int main(int argc, char *argv[]) {
 				break;
 		}
 	}
-	double time_elapsed = (clock() - t) / CLOCKS_PER_SEC;
 
 	fclose(file);
 
@@ -95,7 +96,6 @@ int main(int argc, char *argv[]) {
 	printf("SUCCESSFUL_DELS %d\n", successul_deletes);
 	printf("FAILED_DELS %d\n", failed_deletes);
 	printf("LOADS %d\n", loads);
-	printf("TIME_ELAPSED %lf\n", time_elapsed);
-
+	stat(tree);
 	return 0;
 }

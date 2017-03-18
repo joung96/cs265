@@ -1,10 +1,6 @@
 #include <stdio.h> 
 #include <stdlib.h>
 
-#define BLOCKSIZE 1000
-#define MAX_LEVELS 5
-#define MULTIPLIER 2
-
 typedef struct node {
 	int key; 
 	int val;
@@ -19,9 +15,10 @@ typedef struct block {
 typedef struct lsm_tree {
 	int num_written; // number of nodes written
 	struct block *blocks;     //array of blocks
+	int maxlevels;
 } lsm_tree; 
 
-lsm_tree *lsm_init(void);
+lsm_tree *lsm_init(int blocksize, int multiplier, int maxlevels);
 
 int put(int key, int value, lsm_tree *tree);
 
