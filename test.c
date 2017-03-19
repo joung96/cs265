@@ -96,6 +96,6 @@ int main(int argc, char *argv[]) {
 	printf("SUCCESSFUL_DELS %d\n", successul_deletes);
 	printf("FAILED_DELS %d\n", failed_deletes);
 	printf("LOADS %d\n", loads);
-	stat(tree);
+	lsm_destroy(tree);
 	return 0;
 }

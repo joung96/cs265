@@ -16,6 +16,7 @@ typedef struct lsm_tree {
 	int num_written; // number of nodes written
 	struct block *blocks;     //array of blocks
 	int maxlevels;
+	int blocksize;
 } lsm_tree; 
 
 lsm_tree *lsm_init(int blocksize, int multiplier, int maxlevels);

@@ -34,6 +34,7 @@ lsm_tree *lsm_init(int blocksize, int multiplier, int maxlevels) {
 	}
 	tree->num_written = 0;
 	tree->maxlevels = maxlevels; 
+	tree->blocksize = blocksize;
 
 	return tree;
 }
@@ -72,7 +73,7 @@ int put(int key, int value, lsm_tree *tree) {
 
 		// push changes throughout table
 		// sort node lists
-		qsort(tree->blocks[i - 1].nodes, tree->blocks[i - 1].curr_size, sizeof(node), comparison);
+		mergesort(tree->blocks[i - 1].nodes, tree->blocks[i - 1].curr_size, sizeof(node), comparison);
 		if (i == tree->maxlevels) {
 			result = push_to_disk(tree);
 			if (result != 0) {
@@ -84,7 +85,7 @@ int put(int key, int value, lsm_tree *tree) {
 		}
 
 		while(i != 0) {
-			qsort(tree->blocks[i].nodes, tree->blocks[i].curr_size, sizeof(node), comparison);
+			mergesort(tree->blocks[i].nodes, tree->blocks[i].curr_size, sizeof(node), comparison);
 			// delete duplicates
 			for (int j = 0; j < tree->blocks[i].curr_size; j++) {
 				for (int k = 0; k < tree->blocks[i - 1].curr_size; k++) {
@@ -130,6 +131,14 @@ int comparison(const void *a, const void *b) {
 		return 1; 
 	return 0; 
 }
+
+// int read_block(int block_number, node *buffer, lsm_tree *tree) { 
+// 	FILE *file = fopen("disk.txt", "r");
+// 	fseek(file, sizeof(node) * (tree->blocksize * block_number),SEEK_SET);
+// 	fread(buffer, sizeof(node), tree->blocksize, file);
+// 	fclose(file);
+// 	return 0;
+// }
 
 int push_to_disk(lsm_tree *tree) { 
 	node *all_data_buffer = NULL;
@@ -242,7 +251,7 @@ int get(int key, lsm_tree *tree) {
 	keynode.key = key;
 
 	// TODO figure out sorts
-	qsort(tree->blocks[0].nodes, tree->blocks[0].curr_size, sizeof(node), comparison);
+	mergesort(tree->blocks[0].nodes, tree->blocks[0].curr_size, sizeof(node), comparison);
 	for (int i = 0; i < tree->maxlevels;i++) {
 		found = bsearch(&keynode, tree->blocks[i].nodes, tree->blocks[i].curr_size, sizeof(node), comparison);
 	    if (found) {
@@ -404,7 +413,7 @@ int delete(int key, lsm_tree *tree) {
 		}
 
 		result = fread(disk_buffer, sizeof(node), tree->num_written, file); 
-		if (result == 0) {
+		if (result == 0) { 
 			fclose(file); 
 			free(disk_buffer);
 			perror("fread failed while deleting");
@@ -422,7 +431,7 @@ int delete(int key, lsm_tree *tree) {
 			if (key == disk_buffer[i].key) {
 				disk_buffer[i] = disk_buffer[tree->num_written - 1];
 				tree->num_written--;
-				qsort(disk_buffer, tree->num_written, sizeof(node), comparison);
+				mergesort(disk_buffer, tree->num_written, sizeof(node), comparison);
 
 				file = fopen("disk.txt", "w");  
 				result = fwrite(disk_buffer, sizeof(node), tree->num_written, file);
