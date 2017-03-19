@@ -128,7 +128,7 @@ if __name__ == "__main__":
             # LOAD
             if line[0] == "l":
                 log("LOAD", verbose)
-                filename = line[2:-1]
+                filename = line[3:-2]
                 with open(filename, "rb") as f:
                     while True:
                         buf = f.read(4)

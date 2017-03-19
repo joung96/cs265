@@ -71,15 +71,26 @@ int main(int argc, char *argv[]) {
 				break;
 
 			case 'r': 
-				// key = atoi(strtok(NULL, " "));
-				// val = atoi(strtok(NULL, " "));
-				// range(key, val, tree);
+				key = atoi(strtok(NULL, " "));
+				val = atoi(strtok(NULL, " "));
+				range(key, val, tree);
 				ranges++;
 				break;
 
 			case 'l': 
 				loadfile = strtok(NULL, " ");
-				load(loadfile, tree);
+				int i = 0 ;
+				while(loadfile[i + 1] != '.')
+					i++;
+				char filebuffer[i + 5]; 
+				for (int j = 0; j < i; j++) 
+					filebuffer[j] = loadfile[j + 1];
+				filebuffer[i] = '.'; 
+				filebuffer[i + 1] = 'd';
+				filebuffer[i + 2] = 'a';
+				filebuffer[i + 3] = 't';
+				filebuffer[i + 4] = '\0';
+		    	load(filebuffer, tree);
 				loads++;
 				break;
 		}

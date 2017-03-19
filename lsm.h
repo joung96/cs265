@@ -23,6 +23,8 @@ lsm_tree *lsm_init(int blocksize, int multiplier, int maxlevels);
 
 int put(int key, int value, lsm_tree *tree);
 
+void remove_duplicates(node* buf_to_edit, int sz1, node* ref_buf, int sz2);
+
 int push_to_disk(lsm_tree *tree);
 
 int comparison(const void *a, const void *b);
@@ -39,4 +41,4 @@ int delete(int key, lsm_tree *tree);
 
 int stat(lsm_tree *tree);
 
-int load(const char *filename, lsm_tree *tree);
+int load(char *filename, lsm_tree *tree);
