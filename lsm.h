@@ -1,5 +1,6 @@
 #include <stdio.h> 
 #include <stdlib.h>
+#include <string.h>
 
 typedef struct node {
 	int key; 
@@ -15,9 +16,13 @@ typedef struct block {
 typedef struct lsm_tree {
 	int num_written; // number of nodes written
 	struct block *blocks;     //array of blocks
+	struct block *disk_blocks;
 	int maxlevels;
 	int blocksize;
+	int *disk;
 } lsm_tree; 
+
+char *disk_names[] = {"disk0.txt", "disk1.txt", "disk3.txt", "disk4.txt", "disk5.txt"};
 
 lsm_tree *lsm_init(int blocksize, int multiplier, int maxlevels);
 
@@ -25,7 +30,7 @@ int put(int key, int value, lsm_tree *tree);
 
 void remove_duplicates(node* buf_to_edit, int sz1, node* ref_buf, int sz2);
 
-int push_to_disk(lsm_tree *tree);
+int push_to_disk(lsm_tree *tree, int disk_level);
 
 int comparison(const void *a, const void *b);
 
