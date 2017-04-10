@@ -100,23 +100,25 @@ int put(int key, int value, lsm_tree *tree) {
 		// at the very least we need to push to level 1
 		i = 1; 
 
-		// iterate to calculate what level we need to push to 
+		// iterate to calculate what the highest level we must affect
 		while(i < tree->maxlevels) {
 			sum = tree->blocks[i].curr_size + tree->blocks[i - 1].curr_size;
 
-			// if the sum does not exceed capacity, the correct level is stored in i
+			// if the sum does not exceed capacity, the correct level is level i
 			if (sum <= tree->blocks[i].capacity)
 				break;
 			i++;
 		}
 
+		// if you must affec the disk levels, iterate to find the highest disk level 
+		// we must affect 
 		if (i == tree->maxlevels) {
 			j = 0;
 			if (tree->disk_blocks[0].curr_size == tree->disk_blocks[0].capacity) {
 				j = 1; 
 				while(j < tree->maxlevels) {
 					sum = tree->disk_blocks[j].curr_size + tree->disk_blocks[j - 1].curr_size;
-					if (sum <= tree->disk_blocks[i].capacity)
+					if (sum <= tree->disk_blocks[j].capacity)
 						break;
 					j++;
 					if (j == tree->maxlevels) {
@@ -134,8 +136,7 @@ int put(int key, int value, lsm_tree *tree) {
 				perror("Push to disk failed");
 				return -1;
 			}
-
-			tree->blocks[i].curr_size = 0;
+			assert(tree->blocks[i - 1].curr_size == 0);
 			i--;
 		}
 
@@ -195,82 +196,65 @@ void remove_duplicates(node* buf_to_edit, int sz1, node* ref_buf, int sz2) {
 	}
 }
 
+// read sz nodes from filename to buffer
+node* disk_to_buffer(node *buffer, const char *filename, int sz) {
+	FILE *file;
+	file = fopen(filename, "r");
+	buffer = malloc(sz * sizeof(node));
+	if (!buffer) {
+		perror("buffer mallocing failed");
+		return NULL;
+	}
+	fread(buffer, sizeof(node), sz, file);
+	fclose(file);
+	return buffer;
+}
+
+// write sz nodes from buffer to filename
+void buffer_to_disk(node *buffer, const char *filename, int sz) {
+	FILE *file; 
+	file = fopen(filename, "w");
+	fwrite(buffer, sizeof(node), sz, file);
+	fclose(file);
+}
+
 int push_to_disk(lsm_tree *tree,  int disk_level) { 
 	node *all_data_buffer = NULL;
 	node *disk_buffer = NULL;
 	node *disk_buffer1 = NULL;
 	node *disk_buffer2 = NULL;
 	FILE *file = NULL;
-	FILE *file1 = NULL; 
-	FILE *file2 = NULL;
-	int result = 0;
 	int curr_level = disk_level;
+	int need_to_free = 1;
 
 
 	while (curr_level != 0) {
 		assert(access(disk_names[curr_level], F_OK) != -1);
 		assert(access(disk_names[curr_level - 1], F_OK) != -1);
 
-		file1 = fopen(disk_names[curr_level], "r");
-		disk_buffer1 = malloc(tree->disk_blocks[curr_level].curr_size * sizeof(node));
-		if (!disk_buffer1) {
-			perror("disk buffer malloc failed1");
-			return -1; 
-		}
-		fread(disk_buffer1, sizeof(node), tree->disk_blocks[curr_level].curr_size, file1);
+		disk_buffer1 = disk_to_buffer(disk_buffer1, disk_names[curr_level], tree->disk_blocks[curr_level].curr_size);
+		disk_buffer2 = disk_to_buffer(disk_buffer2, disk_names[curr_level  - 1], tree->disk_blocks[curr_level - 1].curr_size);
 		
-		file2 = fopen(disk_names[curr_level - 1], "r");
-		disk_buffer2 = malloc(tree->disk_blocks[curr_level - 1].curr_size * sizeof(node));
-		if (!disk_buffer2) {
-			perror("disk buffer malloc failed2");
-			return -1; 
-		}
-		fread(disk_buffer2, sizeof(node), tree->disk_blocks[curr_level - 1].curr_size, file2);
-		
-
 		all_data_buffer = malloc(sizeof(node) * (tree->disk_blocks[curr_level].curr_size + tree->disk_blocks[curr_level - 1].curr_size));
 		if (!all_data_buffer) {
 			perror("All data buffer malloc failed");
 			return -1;
 		}
 		remove_duplicates(disk_buffer1, tree->disk_blocks[curr_level].curr_size, disk_buffer2, tree->disk_blocks[curr_level - 1].curr_size);
-
 		merge_data(all_data_buffer, disk_buffer1, disk_buffer2, tree->disk_blocks[curr_level].curr_size, tree->disk_blocks[curr_level - 1].curr_size);
-		result = fclose(file1);
-		if (result) {
-			perror("closure failed");
-			return -1;
-		}
-		result = fclose(file2); 
-		if (result) {
-			perror("closure failed");
-			return -1;
-		}
-		file = fopen(disk_names[curr_level], "w");
 
-		result = fwrite(all_data_buffer, sizeof(node), 
-		(tree->disk_blocks[curr_level].curr_size + tree->blocks[curr_level - 1].curr_size), file);
+		buffer_to_disk(all_data_buffer, disk_names[curr_level], tree->disk_blocks[curr_level].curr_size + tree->disk_blocks[curr_level - 1].curr_size);
 
-		fclose(file);
-
-		tree->disk_blocks[curr_level].curr_size += tree->blocks[curr_level - 1].curr_size;
+		tree->disk_blocks[curr_level].curr_size += tree->disk_blocks[curr_level - 1].curr_size;
 		tree->disk_blocks[curr_level - 1].curr_size = 0;
 		curr_level--;
+
+		free(disk_buffer1);
+		free(disk_buffer2);
+		free(all_data_buffer);
 	}
 
-	assert(curr_level == 0);
-	assert(access(disk_names[curr_level], F_OK) != -1);
-
-	file = fopen(disk_names[curr_level], "r");
-
-	disk_buffer = malloc(tree->disk_blocks[curr_level].curr_size * sizeof(node)); 
-	if (!disk_buffer) {
-		perror("Disk buffer malloc failed");
-		return -1;
-	}
-
-	// read all nodes from disk buffer
-	fread(disk_buffer, sizeof(node), tree->disk_blocks[curr_level].curr_size, file); 
+	disk_buffer = disk_to_buffer(disk_buffer, disk_names[curr_level], tree->disk_blocks[curr_level].curr_size);
 
 	all_data_buffer = malloc(sizeof(node) * (tree->disk_blocks[curr_level].curr_size+ tree->blocks[tree->maxlevels - 1].curr_size));
 	if (!all_data_buffer) {
@@ -279,48 +263,27 @@ int push_to_disk(lsm_tree *tree,  int disk_level) {
 	}
 
 	remove_duplicates(disk_buffer, tree->disk_blocks[curr_level].curr_size, tree->blocks[tree->maxlevels - 1].nodes, tree->blocks[tree->maxlevels - 1].curr_size);
-
 	// merge disk nodes with the lowest level of the lsm tree
 	merge_data(all_data_buffer, disk_buffer, tree->blocks[tree->maxlevels - 1].nodes, 
 		       tree->disk_blocks[curr_level].curr_size, tree->blocks[tree->maxlevels - 1].curr_size);
-
-	result = fclose(file); 
-	if (result) {
-		perror("file close failed 1"); 
-		return -1;
-	}
-	
 
 	file = fopen(disk_names[curr_level], "w");  
 	if (! all_data_buffer) {
 		// if this is the first time writing to disk just write the last level of the tree
 		all_data_buffer = tree->blocks[tree->maxlevels - 1].nodes;
+		need_to_free = 0;
 	}
 
-	// write the node buffer to disk 
-	result = fwrite(all_data_buffer, sizeof(node), 
-		(tree->disk_blocks[curr_level].curr_size + tree->blocks[tree->maxlevels - 1].curr_size), file);
+	buffer_to_disk(all_data_buffer, disk_names[curr_level], 
+		tree->disk_blocks[curr_level].curr_size + tree->blocks[tree->maxlevels - 1].curr_size);
 
-	if (!result) {
-		fclose(file); 
-		perror("fwrite failed while writing to disk 1");
-		return -1;
-	}
-
-	result = fclose(file); 
-	if (result) {
-		perror("file close failed 2"); 
-		return -1;
-	}
-	
 	// bookkeeping
 	tree->disk_blocks[0].curr_size += tree->blocks[tree->maxlevels - 1].curr_size;
 	tree->blocks[tree->maxlevels - 1].curr_size = 0;
 
 	free(disk_buffer);
-	free(all_data_buffer);
-	free(disk_buffer1);
-	free(disk_buffer2);
+	if (need_to_free)
+		free(all_data_buffer);
 
 	return 0; 
 }
@@ -346,13 +309,13 @@ void merge_data(node *buf, node *left, node *right, int sz1, int sz2) {
 //                                  GET                                      //
 ///////////////////////////////////////////////////////////////////////////////
 int get(int key, lsm_tree *tree) {
-	int result; 
 	int curr_level;
 
 	// need a temporary storage location for the key to get
 	node keynode;
 	node *found; 
 	keynode.key = key;
+	node *disk_buffer;
 
 	// sort the toplevel -- lowerlevels are sorted because of the push implementation
 	mergesort(tree->blocks[0].nodes, tree->blocks[0].curr_size, sizeof(node), comparison);
@@ -369,39 +332,22 @@ int get(int key, lsm_tree *tree) {
 	curr_level = 0; 
 
 	while(curr_level < tree->maxlevels - 1) {
+		assert(access(disk_names[curr_level], F_OK) != -1); 
+		if (tree->disk_blocks[curr_level].curr_size == 0) {
+			curr_level++;
+			continue;
+		}
 		// did not find in RAM -- try search on disk
-		if (access(disk_names[curr_level], F_OK) != -1 && tree->disk_blocks[curr_level].curr_size != 0) {
-			FILE *file = fopen(disk_names[curr_level], "r"); 
-			if (!file) {
-				perror("file open in get failed");
-				return -1;
-			}
+		disk_buffer = disk_to_buffer(disk_buffer, disk_names[curr_level], tree->disk_blocks[curr_level].curr_size);	
 
-			node *disk_buffer = malloc(tree->disk_blocks[0].curr_size * sizeof(node)); 
-			if (!disk_buffer) {
-				perror("Disk buffer malloc failed");
-				return -1;
-			}
-
-			// read all nodes in from disk 
-			result = fread(disk_buffer, sizeof(node), tree->disk_blocks[0].curr_size, file); 
-
-			result = fclose(file);
-			if (result) {
-				perror("File close failed in get");
-				return -1;
-			}	
-
-			// search disk nodes
-			found = bsearch(&keynode, disk_buffer, tree->disk_blocks[0].curr_size, sizeof(node), comparison);
-		    if (found) {
-		    	printf("%d\n", found->val);
-		    	free(disk_buffer);
-		    	return 0;
-		    }
-		    free(disk_buffer);
-		} 
-
+		// search disk nodes
+		found = bsearch(&keynode, disk_buffer, tree->disk_blocks[curr_level].curr_size, sizeof(node), comparison);
+	    if (found) {
+	    	printf("%d\n", found->val);
+	    	free(disk_buffer);
+	    	return 0;
+	    }
+	    free(disk_buffer);
 		curr_level ++;
 	}
 	// not found
