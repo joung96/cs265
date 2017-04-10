@@ -5,6 +5,7 @@
 typedef struct node {
 	int key; 
 	int val;
+	int ghost;
 } node;
 
 typedef struct block {
