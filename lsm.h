@@ -22,7 +22,7 @@ typedef struct lsm_tree {
 	int *disk;
 } lsm_tree; 
 
-char *disk_names[] = {"disk0.txt", "disk1.txt", "disk3.txt", "disk4.txt", "disk5.txt"};
+extern char *disk_names[];
 
 lsm_tree *lsm_init(int blocksize, int multiplier, int maxlevels);
 
