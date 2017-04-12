@@ -10,4 +10,4 @@ all:
 	rm disk3.txt 
 	rm disk4.txt 
 	 
-	gcc lsm.c test.c -o lsm -Wall -g
+	gcc bloom.c lsm.c test.c -o lsm -Wall -g

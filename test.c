@@ -23,6 +23,7 @@ int main(int argc, char *argv[]) {
 	char line[50]; 
 	char *token; 
 	char *loadfile;
+	char *strkey;
 	int key; 
 	int val;
 
@@ -41,9 +42,10 @@ int main(int argc, char *argv[]) {
 		token = strtok(line, " "); 
 		switch (*token) {
 			case 'p': 
-				key = atoi(strtok(NULL, " "));
+				strkey = strtok(NULL, " ");
+				key = atoi(strkey);
 				val = atoi(strtok(NULL, " "));
-				result = put(key, val, tree);
+				result = put(key, val, strkey, tree);
 				if (result >= 0)
 					puts++; 
 				else {
@@ -54,16 +56,20 @@ int main(int argc, char *argv[]) {
 
 			case 'g': 
 				total_gets++;
-				key = atoi(strtok(NULL, " "));
-				if (get(key, tree) == 0) 
+				strkey = strtok(NULL, " ");
+				key = atoi(strkey);
+				if (get(key, strkey, tree) == 0) 
 					successful_gets++;
-				else 
+				else {
+					printf("FAILED: %d", key);
 					failed_gets++;
+				}
 				break;
 
 			case 'd': 
-				key = atoi(strtok(NULL, " "));
-				result = delete(key, tree);
+				strkey = strtok(NULL, " ");
+				key = atoi(strkey);
+				result = delete(key, strkey, tree);
 				if (result) 
 					failed_deletes++;
 				else 

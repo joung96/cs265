@@ -4,7 +4,9 @@
 #include <string.h>
 #include <unistd.h>  
 #include <math.h> 
+#include <pthread.h>
 #include "lsm.h"
+#include "bloom.h"
 
 
 char *disk_names[] = {"disk0.txt", "disk1.txt", "disk3.txt", "disk4.txt", "disk5.txt"};
@@ -45,11 +47,15 @@ lsm_tree *lsm_init(int blocksize, int multiplier, int maxlevels) {
 		}
 		tree->blocks[i].capacity = capacity;
 		tree->blocks[i].curr_size = 0;
+		tree->blocks[i].hi = 0; 
+		tree->blocks[i].lo = 0; 
 	}
 
 	for (int i = 0; i < maxlevels; i++) {
 		tree->disk_blocks[i].capacity = tree->blocks[maxlevels - 1].capacity * pow(multiplier, i + 1);
 		tree->disk_blocks[i].curr_size = 0;
+		tree->disk_blocks[i].hi = 0; 
+		tree->disk_blocks[i].lo = 0; 
 		tree->disk_blocks[i].nodes = NULL;
 		file = fopen(disk_names[i], "w");
 		result = fclose(file);
@@ -57,7 +63,6 @@ lsm_tree *lsm_init(int blocksize, int multiplier, int maxlevels) {
 			perror("file close failed");
 			return NULL;
 		}
-
 	}
 
 	tree->num_written = 0;
@@ -77,22 +82,47 @@ void lsm_destroy(lsm_tree *tree) {
 	free(tree);
 }
 
+void update_fence(block *block, int key) {
+	int same = 0;
+	if (block->curr_size == 0) {
+		same = 1;
+	}
+
+	if (key < block->lo){
+		block->lo = key; 
+		if (same) {
+			block->hi = key; 
+		}
+	}
+
+	else if (key > block->hi){
+		block->hi = key; 
+		if (same) {
+			block->lo = key;
+		}
+	}
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 //                                  PUT                                      //
 ///////////////////////////////////////////////////////////////////////////////
 
-int put(int key, int value, lsm_tree *tree) {
+int put(int key, int value, char *strkey, lsm_tree *tree) {
 	int result;
 	node *newnodes = NULL;
 	int i; 
 	int j;
 	int sum; 
 
+	bf_edit(strkey, 1);
+
 	//fill a new node with the key/value
 	node newnode; 
 	newnode.key = key; 
 	newnode.val = value;
 	newnode.ghost = 0;
+
+	mergesort(tree->blocks[0].nodes, tree->blocks[0].curr_size, sizeof(node), comparison);
  
 	// first level is full so some merging must happen
 	if (tree->blocks[0].curr_size == tree->blocks[0].capacity) {
@@ -154,6 +184,8 @@ int put(int key, int value, lsm_tree *tree) {
 			memcpy(tree->blocks[i].nodes, newnodes, sizeof(node) * tree->blocks[i].capacity);
 			// clear level (i - 1)
 			tree->blocks[i].curr_size += tree->blocks[i - 1].curr_size;
+			tree->blocks[i].lo = tree->blocks[i].nodes[0].key;
+			tree->blocks[i].hi = tree->blocks[i].nodes[tree->blocks[i].curr_size - 1].key;
 			tree->blocks[i - 1].curr_size = 0;
 			i--;
 			free(newnodes);
@@ -164,12 +196,14 @@ int put(int key, int value, lsm_tree *tree) {
 	// at this point we know there is enough space in level 0
 	assert(tree->blocks[0].curr_size < tree->blocks[0].capacity);
 
+	update_fence(&tree->blocks[0], key);
 	// insert newnode
 	tree->blocks[0].nodes[tree->blocks[0].curr_size] = newnode;
 	tree->blocks[0].curr_size++;
 	return 0;
 
 }
+
 
 // takes two nodes and compares key values
 int comparison(const void *a, const void *b) {
@@ -223,14 +257,10 @@ int push_to_disk(lsm_tree *tree,  int disk_level) {
 	node *disk_buffer = NULL;
 	node *disk_buffer1 = NULL;
 	node *disk_buffer2 = NULL;
-	FILE *file = NULL;
 	int curr_level = disk_level;
 	int need_to_free = 1;
 
-
 	while (curr_level != 0) {
-		assert(access(disk_names[curr_level], F_OK) != -1);
-		assert(access(disk_names[curr_level - 1], F_OK) != -1);
 
 		disk_buffer1 = disk_to_buffer(disk_buffer1, disk_names[curr_level], tree->disk_blocks[curr_level].curr_size);
 		disk_buffer2 = disk_to_buffer(disk_buffer2, disk_names[curr_level  - 1], tree->disk_blocks[curr_level - 1].curr_size);
@@ -246,6 +276,8 @@ int push_to_disk(lsm_tree *tree,  int disk_level) {
 		buffer_to_disk(all_data_buffer, disk_names[curr_level], tree->disk_blocks[curr_level].curr_size + tree->disk_blocks[curr_level - 1].curr_size);
 
 		tree->disk_blocks[curr_level].curr_size += tree->disk_blocks[curr_level - 1].curr_size;
+		tree->disk_blocks[curr_level].lo = all_data_buffer[0].key;
+		tree->disk_blocks[curr_level].hi = all_data_buffer[tree->disk_blocks[curr_level].curr_size - 1].key; 
 		tree->disk_blocks[curr_level - 1].curr_size = 0;
 		curr_level--;
 
@@ -254,31 +286,28 @@ int push_to_disk(lsm_tree *tree,  int disk_level) {
 		free(all_data_buffer);
 	}
 
-	disk_buffer = disk_to_buffer(disk_buffer, disk_names[curr_level], tree->disk_blocks[curr_level].curr_size);
+	assert(curr_level == 0);
 
-	all_data_buffer = malloc(sizeof(node) * (tree->disk_blocks[curr_level].curr_size+ tree->blocks[tree->maxlevels - 1].curr_size));
+	disk_buffer = disk_to_buffer(disk_buffer, disk_names[0], tree->disk_blocks[0].curr_size);
+
+	all_data_buffer = malloc(sizeof(node) * (tree->disk_blocks[0].curr_size+ tree->blocks[tree->maxlevels - 1].curr_size));
 	if (!all_data_buffer) {
 		perror("All data buffer malloc failed");
 		return -1;
 	}
+	remove_duplicates(disk_buffer, tree->disk_blocks[0].curr_size, tree->blocks[tree->maxlevels - 1].nodes, tree->blocks[tree->maxlevels - 1].curr_size);
 
-	remove_duplicates(disk_buffer, tree->disk_blocks[curr_level].curr_size, tree->blocks[tree->maxlevels - 1].nodes, tree->blocks[tree->maxlevels - 1].curr_size);
 	// merge disk nodes with the lowest level of the lsm tree
 	merge_data(all_data_buffer, disk_buffer, tree->blocks[tree->maxlevels - 1].nodes, 
-		       tree->disk_blocks[curr_level].curr_size, tree->blocks[tree->maxlevels - 1].curr_size);
+		       tree->disk_blocks[0].curr_size, tree->blocks[tree->maxlevels - 1].curr_size);
 
-	file = fopen(disk_names[curr_level], "w");  
-	if (! all_data_buffer) {
-		// if this is the first time writing to disk just write the last level of the tree
-		all_data_buffer = tree->blocks[tree->maxlevels - 1].nodes;
-		need_to_free = 0;
-	}
+	buffer_to_disk(all_data_buffer, disk_names[0], 
+		tree->disk_blocks[0].curr_size + tree->blocks[tree->maxlevels - 1].curr_size);
 
-	buffer_to_disk(all_data_buffer, disk_names[curr_level], 
-		tree->disk_blocks[curr_level].curr_size + tree->blocks[tree->maxlevels - 1].curr_size);
-
-	// bookkeeping
+	// bookkeeping 
 	tree->disk_blocks[0].curr_size += tree->blocks[tree->maxlevels - 1].curr_size;
+	tree->disk_blocks[0].lo = all_data_buffer[0].key;
+	tree->disk_blocks[0].hi = all_data_buffer[tree->disk_blocks[0].curr_size - 1].key;
 	tree->blocks[tree->maxlevels - 1].curr_size = 0;
 
 	free(disk_buffer);
@@ -308,46 +337,54 @@ void merge_data(node *buf, node *left, node *right, int sz1, int sz2) {
 ///////////////////////////////////////////////////////////////////////////////
 //                                  GET                                      //
 ///////////////////////////////////////////////////////////////////////////////
-int get(int key, lsm_tree *tree) {
+int get(int key, char *strkey, lsm_tree *tree) {
 	int curr_level;
+
+	if (bf_search(strkey) == 0) {
+		printf("\n");
+		return -1;
+	}
+
 
 	// need a temporary storage location for the key to get
 	node keynode;
 	node *found; 
 	keynode.key = key;
-	node *disk_buffer;
+	node *disk_buffer = NULL;
 
 	// sort the toplevel -- lowerlevels are sorted because of the push implementation
 	mergesort(tree->blocks[0].nodes, tree->blocks[0].curr_size, sizeof(node), comparison);
 	for (int i = 0; i < tree->maxlevels;i++) {
 		// search for the node
-		found = bsearch(&keynode, tree->blocks[i].nodes, tree->blocks[i].curr_size, sizeof(node), comparison);
-	    if (found) {
-    		printf("%d\n", found->val);
-    		return 0;
-    	}
+		if (tree->blocks[i].curr_size != 0 && key <= tree->blocks[i].hi && key >= tree->blocks[i].lo) {
+			found = bsearch(&keynode, tree->blocks[i].nodes, tree->blocks[i].curr_size, sizeof(node), comparison);
+		    if (found) {
+	    		printf("%d\n", found->val);
+	    		return 0;
+	    	}
+	    }
 
 	}
 
 	curr_level = 0; 
 
-	while(curr_level < tree->maxlevels - 1) {
-		assert(access(disk_names[curr_level], F_OK) != -1); 
-		if (tree->disk_blocks[curr_level].curr_size == 0) {
-			curr_level++;
-			continue;
-		}
-		// did not find in RAM -- try search on disk
-		disk_buffer = disk_to_buffer(disk_buffer, disk_names[curr_level], tree->disk_blocks[curr_level].curr_size);	
+	while(curr_level < tree->maxlevels) {
 
-		// search disk nodes
-		found = bsearch(&keynode, disk_buffer, tree->disk_blocks[curr_level].curr_size, sizeof(node), comparison);
-	    if (found) {
-	    	printf("%d\n", found->val);
-	    	free(disk_buffer);
-	    	return 0;
-	    }
-	    free(disk_buffer);
+		assert(access(disk_names[curr_level], F_OK) != -1); 
+		// check fence pointers
+		if (tree->disk_blocks[curr_level].curr_size != 0 && key <= tree->disk_blocks[curr_level].hi 
+			&& key >= tree->disk_blocks[curr_level].lo) {
+			// did not find in RAM -- try search on disk
+			disk_buffer = disk_to_buffer(disk_buffer, disk_names[curr_level], tree->disk_blocks[curr_level].curr_size);
+			// search disk nodes
+			found = bsearch(&keynode, disk_buffer, tree->disk_blocks[curr_level].curr_size, sizeof(node), comparison);
+		    if (found) {
+		    	printf("%d\n", found->val);
+		    	free(disk_buffer);
+		    	return 0;
+		    }
+		    free(disk_buffer);
+		}
 		curr_level ++;
 	}
 	// not found
@@ -462,7 +499,7 @@ int range(int key1, int key2, lsm_tree *tree){
 //                                DELETE                                     //
 ///////////////////////////////////////////////////////////////////////////////
 
-int delete(int key, lsm_tree *tree) {
+int delete(int key, char *strkey, lsm_tree *tree) {
 	int curr_level; 
 	// check if in memory
 	for (int i = 0; i < tree->maxlevels; i++) {
@@ -471,6 +508,7 @@ int delete(int key, lsm_tree *tree) {
 			if (key == tree->blocks[i].nodes[j].key) {
 				memmove(&tree->blocks[i].nodes[j], &tree->blocks[i].nodes[j + 1], sizeof(node) * (tree->blocks[i].curr_size - j));
 				tree->blocks[i].curr_size--; 
+				//bf_edit(strkey, 0);
 				return 0;
 			}
 		}
@@ -529,6 +567,7 @@ int delete(int key, lsm_tree *tree) {
 						return -1;
 					}
 					free(disk_buffer);
+					//bf_edit(strkey, 0);
 					return 0;
 				}
 			}
@@ -583,7 +622,7 @@ int load(char *filename, lsm_tree *tree) {
 
 	// read pairs of numbers from the buffer into a put query
 	for (int i = 0; i < num_ints; i += 2) 
-		put(buffer[i], buffer[i+1], tree);
+		put(buffer[i], buffer[i+1], NULL, tree);
 	return 0;
 }
 
