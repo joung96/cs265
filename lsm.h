@@ -15,6 +15,7 @@ typedef struct block {     // level
 	int capacity;
 	int curr_size;
 	int *bloom_filter; // pointer to bloom filter for this level 
+	int num_bits; 
 	int num_hashes; // number of hash functions to apply to this filter
 	int hi; // fence pointers
 	int lo; 

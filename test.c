@@ -16,12 +16,12 @@ int main(int argc, char *argv[]) {
 	int blocksize = atoi(argv[1]); 
 	int multiplier = atoi(argv[2]); 
 	int maxlevels = atoi(argv[3]);
-	int num_threads = atoi(argv[4]);
+	int num_threads = 0;
 
 	lsm_tree *tree = lsm_init(blocksize, multiplier, maxlevels);
 	int result; 
 
-	const char *filename = argv[5]; 
+	const char *filename = argv[4]; 
 	FILE *file = fopen(filename, "r"); // check res
 	if (!file) {
 		perror("File was NULL");
