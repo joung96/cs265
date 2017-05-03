@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <assert.h> 
 #include <string.h>
+#include "lsm.h"
 #include <unistd.h>  
 #include <math.h> 
 #include "bloom.h"
@@ -80,7 +81,7 @@ unsigned hash7(const char *str, int len) {
 	return sum % BLOOM_SZ;
 }
 
-void bf_insert(char* key) {
+void bf_insert(char* key, int *bloom_bitmap) {
 	int len = strlen(key);
 	int hash = 0; 
 	hash = hash1(key, len);
@@ -105,50 +106,42 @@ void bf_insert(char* key) {
 	set(bloom_bitmap,hash);
 }
 
-int bf_search(char* key) {
+int bf_search(char* key, int *bloom_bitmap) {
 	int len = strlen(key) - 1; 
 	int hash = hash1(key, len); 
-	if (test(bloom_bitmap, hash))
+	if (!test(bloom_bitmap, hash))
 		return 0; 
 	hash = hash2(key, len); 
-	if (test(bloom_bitmap, hash))
+	if (!test(bloom_bitmap, hash))
 		return 0; 
 	hash = hash3(key, len); 
-	if (test(bloom_bitmap, hash))
+	if (!test(bloom_bitmap, hash))
 		return 0; 
 	hash = hash4(key, len); 
-	if (test(bloom_bitmap, hash))
+	if (!test(bloom_bitmap, hash))
 		return 0; 
 	hash = hash5(key, len); 
-	if (test(bloom_bitmap, hash))
+	if (!test(bloom_bitmap, hash))
 		return 0; 
 	hash = hash6(key, len); 
-	if (test(bloom_bitmap, hash))
+	if (!test(bloom_bitmap, hash))
 		return 0; 
 	hash = hash7(key, len); 
-	if (test(bloom_bitmap, hash))
+	if (!test(bloom_bitmap, hash))
 		return 0; 
 	return 1;
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+void bf_refresh(struct block block, node *nodes) {
+	int i; 
+	char strkey[MAX_NAMELEN];
+	// zero out all bits
+	for (i = 0; i < block.num_bits; i++) {
+		zero(block.bloom_filter, i);
+	}
+	// set bits
+	for (i = 0 ; i < block.curr_size; i ++) {
+		sprintf((char*)&strkey, "%d", nodes[i].key);
+		bf_insert((char*)&strkey, block.bloom_filter);
+	}
+}

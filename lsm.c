@@ -20,6 +20,7 @@ lsm_tree *lsm_init(int blocksize, int multiplier, int maxlevels) {
 	lsm_tree *tree;
 	block *block;
 	int num_bits;
+	int capacity;
 	int result;
 	FILE *file = NULL;
 
@@ -35,12 +36,20 @@ lsm_tree *lsm_init(int blocksize, int multiplier, int maxlevels) {
 	}
 	// fill the tree with the right number of blocks
 	tree->blocks = malloc(sizeof(block) * sizeof(node) * maxlevels);
+	if (!tree->blocks) {
+		perror("malloc failed for tree->blocks");
+		return NULL;
+	}
 	tree->disk_blocks = malloc(sizeof(block) * sizeof(node) * maxlevels);
+	if (!tree->disk_blocks) {
+		perror("malloc failed for tree->disk_blocks");
+		return NULL;
+	}
 
 	// fill each block with the correct number of nodes
 	for (int i = 0; i < maxlevels; i++) {
 		// calculate node capcity based on level and multiplier
-		int capacity = blocksize * pow(multiplier, i);
+		capacity = blocksize * pow(multiplier, i);
 		tree->blocks[i].nodes = malloc(sizeof(node) * capacity);
 		if (!tree->blocks[i].nodes) {
 			perror("Tree node list malloc failed");
@@ -53,16 +62,33 @@ lsm_tree *lsm_init(int blocksize, int multiplier, int maxlevels) {
 
 		// formulas for optimal bloom filter params from http://hur.st/bloomfilter?n=100&p=.05
 		num_bits = ceil((capacity * log(.05)) / log(1.0 / (pow(2.0, log(2.0)))));
+		tree->blocks[i].num_bits = num_bits;
 		tree->blocks[i].bloom_filter = malloc(ceil(num_bits / 8));
+		if (!tree->blocks[i].bloom_filter) {
+			perror("gah");
+			return NULL;
+		}
 		tree->blocks[i].num_hashes = round(log(2.0) *  num_bits/ capacity);
 	}
 
 	for (int i = 0; i < maxlevels; i++) {
-		tree->disk_blocks[i].capacity = tree->blocks[maxlevels - 1].capacity * pow(multiplier, i + 1);
+		capacity = tree->blocks[maxlevels - 1].capacity * pow(multiplier, i + 1);
+		tree->disk_blocks[i].capacity = capacity;
 		tree->disk_blocks[i].curr_size = 0;
 		tree->disk_blocks[i].hi = 0; 
 		tree->disk_blocks[i].lo = 0; 
 		tree->disk_blocks[i].nodes = NULL;
+
+		// formulas for optimal bloom filter params from http://hur.st/bloomfilter?n=100&p=.05
+		num_bits = ceil((capacity * log(.05)) / log(1.0 / (pow(2.0, log(2.0)))));
+		tree->disk_blocks[i].num_bits = num_bits;
+		tree->disk_blocks[i].bloom_filter = malloc(ceil(num_bits / 8));
+		if (!tree->disk_blocks[i].bloom_filter) {
+			perror("fdasf");
+			return NULL;
+		}
+		tree->disk_blocks[i].num_hashes = round(log(2.0) *  num_bits/ capacity);
+
 		file = fopen(disk_names[i], "w");
 		result = fclose(file);
 		if (result) {
@@ -120,7 +146,6 @@ int put(int key, int value, char *strkey, lsm_tree *tree) {
 	int j;
 	int sum; 
 
-	bf_insert(strkey);  // insert into bloom filter
 
 	//fill a new node with the key/value
 	node newnode; 
@@ -179,6 +204,7 @@ int put(int key, int value, char *strkey, lsm_tree *tree) {
 
 		// push changes throughout the tree
 		while(i != 0) {
+			assert(i > 0);
 			mergesort(tree->blocks[i].nodes, tree->blocks[i].curr_size, sizeof(node), comparison);
 			remove_duplicates(tree->blocks[i].nodes, tree->blocks[i].curr_size, tree->blocks[i - 1].nodes, tree->blocks[i - 1].curr_size);
 
@@ -188,14 +214,18 @@ int put(int key, int value, char *strkey, lsm_tree *tree) {
 			merge_data(newnodes, tree->blocks[i].nodes, tree->blocks[i - 1].nodes, 
 				tree->blocks[i].curr_size, tree->blocks[i - 1].curr_size); 
 			memcpy(tree->blocks[i].nodes, newnodes, sizeof(node) * tree->blocks[i].capacity);
-			// clear level (i - 1)
 			tree->blocks[i].curr_size += tree->blocks[i - 1].curr_size;
 			tree->blocks[i].lo = tree->blocks[i].nodes[0].key;
 			tree->blocks[i].hi = tree->blocks[i].nodes[tree->blocks[i].curr_size - 1].key;
+			// update bloom filter
+			bf_refresh(tree->blocks[i], tree->blocks[i].nodes);
+
+			// clear level (i - 1)
 			tree->blocks[i - 1].curr_size = 0;
 			i--;
 			free(newnodes);
 		}
+		bf_refresh(tree->blocks[0], tree->blocks[0].nodes);
 
 	}
 
@@ -206,6 +236,7 @@ int put(int key, int value, char *strkey, lsm_tree *tree) {
 	// insert newnode
 	tree->blocks[0].nodes[tree->blocks[0].curr_size] = newnode;
 	tree->blocks[0].curr_size++;
+	bf_insert(strkey, tree->blocks[0].bloom_filter);
 	return 0;
 
 }
@@ -285,6 +316,7 @@ int push_to_disk(lsm_tree *tree,  int disk_level) {
 		tree->disk_blocks[curr_level].lo = all_data_buffer[0].key;
 		tree->disk_blocks[curr_level].hi = all_data_buffer[tree->disk_blocks[curr_level].curr_size - 1].key; 
 		tree->disk_blocks[curr_level - 1].curr_size = 0;
+		bf_refresh(tree->disk_blocks[curr_level], all_data_buffer);
 		curr_level--;
 
 		free(disk_buffer1);
@@ -314,6 +346,8 @@ int push_to_disk(lsm_tree *tree,  int disk_level) {
 	tree->disk_blocks[0].curr_size += tree->blocks[tree->maxlevels - 1].curr_size;
 	tree->disk_blocks[0].lo = all_data_buffer[0].key;
 	tree->disk_blocks[0].hi = all_data_buffer[tree->disk_blocks[0].curr_size - 1].key;
+	bf_refresh(tree->disk_blocks[0], all_data_buffer);
+
 	tree->blocks[tree->maxlevels - 1].curr_size = 0;
 
 	free(disk_buffer);
@@ -348,12 +382,6 @@ int get(int key, char *strkey, int num_threads, lsm_tree *tree) {
 	(void)tids;
 	int curr_level;
 
-	// bloom filter search
-	if (bf_search(strkey) == 0) {
-		printf("\n");
-		return -1;
-	}
-
 	// need a temporary storage location for the key to get
 	node keynode;
 	node *found; 
@@ -364,7 +392,11 @@ int get(int key, char *strkey, int num_threads, lsm_tree *tree) {
 	mergesort(tree->blocks[0].nodes, tree->blocks[0].curr_size, sizeof(node), comparison);
 	for (int i = 0; i < tree->maxlevels;i++) {
 		// search for the node
+		// bloom filter search
 		if (tree->blocks[i].curr_size != 0 && key <= tree->blocks[i].hi && key >= tree->blocks[i].lo) {
+			if (bf_search(strkey, tree->blocks[i].bloom_filter) == 0) {
+				continue;
+			}
 			found = bsearch(&keynode, tree->blocks[i].nodes, tree->blocks[i].curr_size, sizeof(node), comparison);
 		    if (found) {
 	    		printf("%d\n", found->val);
@@ -384,6 +416,11 @@ int get(int key, char *strkey, int num_threads, lsm_tree *tree) {
 			&& key >= tree->disk_blocks[curr_level].lo) {
 			// did not find in RAM -- try search on disk
 			disk_buffer = disk_to_buffer(disk_buffer, disk_names[curr_level], tree->disk_blocks[curr_level].curr_size);
+			if (bf_search(strkey, tree->disk_blocks[curr_level].bloom_filter) == 0) {
+				free(disk_buffer);
+				curr_level++;
+				continue;
+			}
 			// search disk nodes
 			found = bsearch(&keynode, disk_buffer, tree->disk_blocks[curr_level].curr_size, sizeof(node), comparison);
 		    if (found) {

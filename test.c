@@ -56,7 +56,6 @@ int main(int argc, char *argv[]) {
 				if (result >= 0)
 					puts++; 
 				else {
-					printf("FAILED PUT!");
 					return -1;
 				}
 				break;
@@ -68,7 +67,6 @@ int main(int argc, char *argv[]) {
 				if (get(key, strkey, num_threads, tree) == 0) 
 					successful_gets++;
 				else {
-					printf("FAILED: %d", key);
 					failed_gets++;
 				}
 				break;
