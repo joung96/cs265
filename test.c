@@ -64,7 +64,13 @@ int main(int argc, char *argv[]) {
 				total_gets++;
 				strkey = strtok(NULL, " ");
 				key = atoi(strkey);
-				if (get(key, strkey, num_threads, tree) == 0) 
+				if (num_threads) {
+					if (parallel_get(key, strkey, num_threads, tree) == 0) 
+						successful_gets++;
+					else 
+						failed_gets++;
+				}
+				else if (get(key, strkey, tree) == 0) 
 					successful_gets++;
 				else {
 					failed_gets++;

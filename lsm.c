@@ -377,10 +377,22 @@ void merge_data(node *buf, node *left, node *right, int sz1, int sz2) {
 ///////////////////////////////////////////////////////////////////////////////
 //                                  GET                                      //
 ///////////////////////////////////////////////////////////////////////////////
-int get(int key, char *strkey, int num_threads, lsm_tree *tree) {
-	pthread_t tids[num_threads];
-	(void)tids;
+void *thread_get(void *args) {
+	struct thread_args *t_args; 
+	t_args = (struct thread_args*) args;
+	return NULL;
+}
+
+int parallel_get(int key, char *strkey, int num_threads, lsm_tree *tree) {
+	// pthread_t tids[num_threads];
+	// thread_args **inputs = malloc(sizeof(thread_args*) * num_threads);
+	// pthread_create(tids[i], NULL, &parallel_get, inputs[i]);
+	return 0;
+}
+
+int get(int key, char *strkey, lsm_tree *tree) {
 	int curr_level;
+	int ret;
 
 	// need a temporary storage location for the key to get
 	node keynode;

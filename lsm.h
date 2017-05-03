@@ -30,6 +30,13 @@ typedef struct lsm_tree {
 	int *disk;
 } lsm_tree; 
 
+typedef struct thread_args {
+	int key;
+	char*strkey;
+	int lvl;
+	lsm_tree *tree;
+} thread_args;
+
 extern char *disk_names[];
 
 lsm_tree *lsm_init(int blocksize, int multiplier, int maxlevels);
@@ -44,7 +51,11 @@ int comparison(const void *a, const void *b);
 
 void merge_data(node *buf, node *buf1, node *buf2, int sz1, int sz2);
 
-int get(int key, char *strkey, int num_threads, lsm_tree *tree);
+int get(int key, char *strkey,lsm_tree *tree);
+
+int parallel_get(int key, char *strkey, int num_threads, lsm_tree *tree);
+
+void *thread_get(void *args);
 
 void lsm_destroy(lsm_tree *tree);
 
