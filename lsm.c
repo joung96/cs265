@@ -9,7 +9,8 @@
 #include "bloom.h"
 
 
-char *disk_names[] = {"disk0.txt", "disk1.txt", "disk3.txt", "disk4.txt", "disk5.txt"};
+char *disk_names[] = {"disk0.txt", "disk1.txt", "disk3.txt", "disk4.txt", "disk5.txt"
+                      ,"disk6.txt", "disk7.txt", "disk8.txt", "disk9.txt", "disk10.txt"};
 
 ///////////////////////////////////////////////////////////////////////////////
 //                                  LSM                                      //
@@ -18,11 +19,12 @@ char *disk_names[] = {"disk0.txt", "disk1.txt", "disk3.txt", "disk4.txt", "disk5
 lsm_tree *lsm_init(int blocksize, int multiplier, int maxlevels) {
 	lsm_tree *tree;
 	block *block;
+	int num_bits;
 	int result;
 	FILE *file = NULL;
 
-	if (maxlevels > 5) {
-		perror("maximum level is 5");
+	if (maxlevels > 10) {
+		perror("maximum level is 10");
 		return NULL;
 	}
 	// allocate memory for the tree struct skeleton
@@ -37,7 +39,6 @@ lsm_tree *lsm_init(int blocksize, int multiplier, int maxlevels) {
 
 	// fill each block with the correct number of nodes
 	for (int i = 0; i < maxlevels; i++) {
-
 		// calculate node capcity based on level and multiplier
 		int capacity = blocksize * pow(multiplier, i);
 		tree->blocks[i].nodes = malloc(sizeof(node) * capacity);
@@ -49,6 +50,11 @@ lsm_tree *lsm_init(int blocksize, int multiplier, int maxlevels) {
 		tree->blocks[i].curr_size = 0;
 		tree->blocks[i].hi = 0; 
 		tree->blocks[i].lo = 0; 
+
+		// formulas for optimal bloom filter params from http://hur.st/bloomfilter?n=100&p=.05
+		num_bits = ceil((capacity * log(.05)) / log(1.0 / (pow(2.0, log(2.0)))));
+		tree->blocks[i].bloom_filter = malloc(ceil(num_bits / 8));
+		tree->blocks[i].num_hashes = round(log(2.0) *  num_bits/ capacity);
 	}
 
 	for (int i = 0; i < maxlevels; i++) {
@@ -114,7 +120,7 @@ int put(int key, int value, char *strkey, lsm_tree *tree) {
 	int j;
 	int sum; 
 
-	bf_edit(strkey, 1);
+	bf_insert(strkey);  // insert into bloom filter
 
 	//fill a new node with the key/value
 	node newnode; 
@@ -337,14 +343,16 @@ void merge_data(node *buf, node *left, node *right, int sz1, int sz2) {
 ///////////////////////////////////////////////////////////////////////////////
 //                                  GET                                      //
 ///////////////////////////////////////////////////////////////////////////////
-int get(int key, char *strkey, lsm_tree *tree) {
+int get(int key, char *strkey, int num_threads, lsm_tree *tree) {
+	pthread_t tids[num_threads];
+	(void)tids;
 	int curr_level;
 
+	// bloom filter search
 	if (bf_search(strkey) == 0) {
 		printf("\n");
 		return -1;
 	}
-
 
 	// need a temporary storage location for the key to get
 	node keynode;
@@ -508,7 +516,6 @@ int delete(int key, char *strkey, lsm_tree *tree) {
 			if (key == tree->blocks[i].nodes[j].key) {
 				memmove(&tree->blocks[i].nodes[j], &tree->blocks[i].nodes[j + 1], sizeof(node) * (tree->blocks[i].curr_size - j));
 				tree->blocks[i].curr_size--; 
-				//bf_edit(strkey, 0);
 				return 0;
 			}
 		}
@@ -567,7 +574,6 @@ int delete(int key, char *strkey, lsm_tree *tree) {
 						return -1;
 					}
 					free(disk_buffer);
-					//bf_edit(strkey, 0);
 					return 0;
 				}
 			}

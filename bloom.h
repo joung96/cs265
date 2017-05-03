@@ -4,7 +4,10 @@
 #define BLOOM_SZ 5000
 extern int bloom_bitmap[BLOOM_SZ];
 
-void bf_edit(char* key, int bit);
+#define set(bloom_filter,index)     ( bloom_filter[(index / 32)] |= (1 << (index % 32)) )         
+#define test(bloom_filter,index)    ( bloom_filter[(index / 32)] & (1 << (index % 32)) )
+
+void bf_insert(char* key);
 int bf_search(char* key);
 
 unsigned hash1(const char* str, int len);

@@ -2,17 +2,21 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define MAX_NAMELEN 60
+
 typedef struct node {
 	int key; 
 	int val;
 	int ghost;
 } node;
 
-typedef struct block {
+typedef struct block {     // level
 	node *nodes;
 	int capacity;
 	int curr_size;
-	int hi; 
+	int *bloom_filter; // pointer to bloom filter for this level 
+	int num_hashes; // number of hash functions to apply to this filter
+	int hi; // fence pointers
 	int lo; 
 } block;
 
@@ -39,7 +43,7 @@ int comparison(const void *a, const void *b);
 
 void merge_data(node *buf, node *buf1, node *buf2, int sz1, int sz2);
 
-int get(int key, char *strkey, lsm_tree *tree);
+int get(int key, char *strkey, int num_threads, lsm_tree *tree);
 
 void lsm_destroy(lsm_tree *tree);
 

@@ -5,16 +5,23 @@
 #include <string.h>
 #include "lsm.h"
 
-
+/* arguments to lsm tree
+   1) blocksize
+   2) multiplier
+   3) maxlevels 
+   4) num threads
+   5) workload filename
+*/ 
 int main(int argc, char *argv[]) {
 	int blocksize = atoi(argv[1]); 
 	int multiplier = atoi(argv[2]); 
 	int maxlevels = atoi(argv[3]);
+	int num_threads = atoi(argv[4]);
 
 	lsm_tree *tree = lsm_init(blocksize, multiplier, maxlevels);
 	int result; 
 
-	const char *filename = argv[4]; 
+	const char *filename = argv[5]; 
 	FILE *file = fopen(filename, "r"); // check res
 	if (!file) {
 		perror("File was NULL");
@@ -58,7 +65,7 @@ int main(int argc, char *argv[]) {
 				total_gets++;
 				strkey = strtok(NULL, " ");
 				key = atoi(strkey);
-				if (get(key, strkey, tree) == 0) 
+				if (get(key, strkey, num_threads, tree) == 0) 
 					successful_gets++;
 				else {
 					printf("FAILED: %d", key);

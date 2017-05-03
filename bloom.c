@@ -9,7 +9,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 //                             BLOOM FILTER                                  //
 ///////////////////////////////////////////////////////////////////////////////
-int bloom_bitmap[BLOOM_SZ] = {0};
+int bloom_bitmap[BLOOM_SZ] = {0};        // bloom filter for all nodes in memory
 
 unsigned hash1(const char* str, int len) {
 	unsigned int x = 548957;
@@ -80,47 +80,53 @@ unsigned hash7(const char *str, int len) {
 	return sum % BLOOM_SZ;
 }
 
-void bf_edit(char* key, int bit) {
+void bf_insert(char* key) {
 	int len = strlen(key);
 	int hash = 0; 
 	hash = hash1(key, len);
-	bloom_bitmap[hash] = bit; 
+	set(bloom_bitmap,hash);
+
 	hash = hash2(key, len);
-	bloom_bitmap[hash] = bit; 
+	set(bloom_bitmap,hash); 
+
 	hash = hash3(key, len);
-	bloom_bitmap[hash] = bit; 
+	set(bloom_bitmap,hash); 
+
 	hash = hash4(key, len);
-	bloom_bitmap[hash] = bit; 
+	set(bloom_bitmap,hash);
+
 	hash = hash5(key, len);
-	bloom_bitmap[hash] = bit; 
+	set(bloom_bitmap,hash);
+
 	hash = hash6(key, len);
-	bloom_bitmap[hash] = bit; 
+	set(bloom_bitmap,hash);
+
 	hash = hash7(key, len);
-	bloom_bitmap[hash] = bit; 
+	set(bloom_bitmap,hash);
 }
 
 int bf_search(char* key) {
 	int len = strlen(key) - 1; 
 	int hash = hash1(key, len); 
-	if (bloom_bitmap[hash] == 0)
+	if (test(bloom_bitmap, hash))
 		return 0; 
 	hash = hash2(key, len); 
-	if (bloom_bitmap[hash] == 0)
+	if (test(bloom_bitmap, hash))
 		return 0; 
 	hash = hash3(key, len); 
-	if (bloom_bitmap[hash] == 0)
+	if (test(bloom_bitmap, hash))
 		return 0; 
 	hash = hash4(key, len); 
-	if (bloom_bitmap[hash] == 0)
+	if (test(bloom_bitmap, hash))
 		return 0; 
 	hash = hash5(key, len); 
-	if (bloom_bitmap[hash] == 0)
+	if (test(bloom_bitmap, hash))
 		return 0; 
 	hash = hash6(key, len); 
-	if (bloom_bitmap[hash] == 0)
+	if (test(bloom_bitmap, hash))
 		return 0; 
 	hash = hash7(key, len); 
-	if (bloom_bitmap[hash] == 0)
+	if (test(bloom_bitmap, hash))
 		return 0; 
 	return 1;
 }
