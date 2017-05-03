@@ -145,3 +145,13 @@ void bf_refresh(struct block block, node *nodes) {
 		bf_insert((char*)&strkey, block.bloom_filter);
 	}
 }
+
+
+
+
+
+
+
+
+
+

@@ -9,8 +9,8 @@
 #include "bloom.h"
 
 
-char *disk_names[] = {"disk0.txt", "disk1.txt", "disk3.txt", "disk4.txt", "disk5.txt"
-                      ,"disk6.txt", "disk7.txt", "disk8.txt", "disk9.txt", "disk10.txt"};
+char *disk_names[] = {"disk0.txt", "disk1.txt", "disk2.txt", "disk3.txt", "disk4.txt", 
+						"disk5.txt","disk6.txt", "disk7.txt", "disk8.txt", "disk9.txt"};
 
 ///////////////////////////////////////////////////////////////////////////////
 //                                  LSM                                      //
@@ -146,7 +146,6 @@ int put(int key, int value, char *strkey, lsm_tree *tree) {
 	int j;
 	int sum; 
 
-
 	//fill a new node with the key/value
 	node newnode; 
 	newnode.key = key; 
@@ -222,11 +221,11 @@ int put(int key, int value, char *strkey, lsm_tree *tree) {
 
 			// clear level (i - 1)
 			tree->blocks[i - 1].curr_size = 0;
+			//bf_refresh(&tree->blocks[i]);
 			i--;
 			free(newnodes);
 		}
 		bf_refresh(tree->blocks[0], tree->blocks[0].nodes);
-
 	}
 
 	// at this point we know there is enough space in level 0
@@ -392,7 +391,6 @@ int parallel_get(int key, char *strkey, int num_threads, lsm_tree *tree) {
 
 int get(int key, char *strkey, lsm_tree *tree) {
 	int curr_level;
-	int ret;
 
 	// need a temporary storage location for the key to get
 	node keynode;
@@ -434,6 +432,11 @@ int get(int key, char *strkey, lsm_tree *tree) {
 				continue;
 			}
 			// search disk nodes
+			if (bf_search(strkey, tree->disk_blocks[curr_level].bloom_filter) == 0) {
+				printf("\n");
+				return -1;
+			}
+
 			found = bsearch(&keynode, disk_buffer, tree->disk_blocks[curr_level].curr_size, sizeof(node), comparison);
 		    if (found) {
 		    	printf("%d\n", found->val);
