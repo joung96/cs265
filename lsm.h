@@ -3,6 +3,11 @@
 #include <string.h>
 
 #define MAX_NAMELEN 60
+#define MAX_GETS 8192000  // 8000kB
+
+extern int successful_gets;
+extern int failed_gets; 
+extern int total_gets;
 
 typedef struct node {
 	int key; 
@@ -31,11 +36,12 @@ typedef struct lsm_tree {
 } lsm_tree; 
 
 typedef struct thread_args {
-	int key;
-	char*strkey;
-	int lvl;
+	int start_index;
+	int load_sz;
+	int *allkeys;
 	lsm_tree *tree;
 } thread_args;
+
 
 extern char *disk_names[];
 
@@ -51,7 +57,7 @@ int comparison(const void *a, const void *b);
 
 void merge_data(node *buf, node *buf1, node *buf2, int sz1, int sz2);
 
-int get(int key, char *strkey,lsm_tree *tree);
+int get(int key, char *strkey, int should_print, lsm_tree *tree);
 
 int parallel_get(int key, char *strkey, int num_threads, lsm_tree *tree);
 

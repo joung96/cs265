@@ -1,9 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <pthread.h>
+#include <unistd.h>
+#include <sys/time.h>
 #include <assert.h>
 #include <string.h>
 #include "lsm.h"
+
+int successful_gets = 0;
+int failed_gets = 0; 
 
 /* arguments to lsm tree
    1) blocksize
@@ -13,10 +19,21 @@
    5) workload filename
 */ 
 int main(int argc, char *argv[]) {
+	clock_t begin; 
+	clock_t end; 
+	struct timeval time_begin, time_end;
+	double clock_spent;
+	double time_spent;
+	int ranges = 0; 
+	int successul_deletes = 0; 
+	int failed_deletes = 0; 
+	int loads = 0; 
+	int total_gets = 0;
+	int puts = 0;
+
 	int blocksize = atoi(argv[1]); 
 	int multiplier = atoi(argv[2]); 
 	int maxlevels = atoi(argv[3]);
-	int num_threads = 0;
 
 	lsm_tree *tree = lsm_init(blocksize, multiplier, maxlevels);
 	int result; 
@@ -34,17 +51,9 @@ int main(int argc, char *argv[]) {
 	int key; 
 	int val;
 
-	int puts = 0;
-	int successful_gets = 0;
-	int failed_gets = 0; 
-	int ranges = 0; 
-	int successul_deletes = 0; 
-	int failed_deletes = 0; 
-	int loads = 0; 
-	int total_gets = 0;
-
-	// for every line
-   
+	//for every line
+  	gettimeofday(&time_begin, NULL);
+	begin = clock();
 	while(fgets(line, sizeof(line), file)) {
 		token = strtok(line, " "); 
 		switch (*token) {
@@ -64,17 +73,7 @@ int main(int argc, char *argv[]) {
 				total_gets++;
 				strkey = strtok(NULL, " ");
 				key = atoi(strkey);
-				if (num_threads) {
-					if (parallel_get(key, strkey, num_threads, tree) == 0) 
-						successful_gets++;
-					else 
-						failed_gets++;
-				}
-				else if (get(key, strkey, tree) == 0) 
-					successful_gets++;
-				else {
-					failed_gets++;
-				}
+				get(key, strkey, 0, tree);
 				break;
 
 			case 'd': 
@@ -112,17 +111,22 @@ int main(int argc, char *argv[]) {
 				break;
 		}
 	}
+	gettimeofday(&time_end, NULL);
+	end = clock();
+	clock_spent = (double)(end - begin) / CLOCKS_PER_SEC;
+    time_spent = (double) (time_end.tv_usec - time_begin.tv_usec) /1000000 + (double)(time_end.tv_sec - time_begin.tv_sec);
+	printf("Took %f clocks and %f seconds\n", clock_spent, time_spent);
 
 	fclose(file);
 
-	printf("------------------------------------\n");
-	printf("PUTS %d\n", puts);
-	printf("TOTAL GETS %d\n", total_gets);
-	printf("SUCCESSFUL GETS %d\n", successful_gets);
-	printf("FAILED GETS %d\n", failed_gets);
-	printf("RANGES %d\n", ranges);
-	printf("SUCCESSFUL_DELS %d\n", successul_deletes);
-	printf("FAILED_DELS %d\n", failed_deletes);
-	printf("LOADS %d\n", loads);
+	// printf("------------------------------------\n");
+	// printf("PUTS %d\n", puts);
+	// printf("TOTAL GETS %d\n", total_gets);
+	// printf("SUCCESSFUL GETS %d\n", successful_gets);
+	// printf("FAILED GETS %d\n", failed_gets);
+	// printf("RANGES %d\n", ranges);
+	// printf("SUCCESSFUL_DELS %d\n", successul_deletes);
+	// printf("FAILED_DELS %d\n", failed_deletes);
+	// printf("LOADS %d\n", loads);
 	return 0;
 }

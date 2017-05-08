@@ -221,7 +221,6 @@ int put(int key, int value, char *strkey, lsm_tree *tree) {
 
 			// clear level (i - 1)
 			tree->blocks[i - 1].curr_size = 0;
-			//bf_refresh(&tree->blocks[i]);
 			i--;
 			free(newnodes);
 		}
@@ -235,7 +234,7 @@ int put(int key, int value, char *strkey, lsm_tree *tree) {
 	// insert newnode
 	tree->blocks[0].nodes[tree->blocks[0].curr_size] = newnode;
 	tree->blocks[0].curr_size++;
-	bf_insert(strkey, tree->blocks[0].bloom_filter);
+	bf_insert(strkey, &tree->blocks[0]);
 	return 0;
 
 }
@@ -377,19 +376,21 @@ void merge_data(node *buf, node *left, node *right, int sz1, int sz2) {
 //                                  GET                                      //
 ///////////////////////////////////////////////////////////////////////////////
 void *thread_get(void *args) {
-	struct thread_args *t_args; 
+	struct thread_args *t_args = malloc(sizeof(struct thread_args));
+	char *strkey; 
 	t_args = (struct thread_args*) args;
+	int i;
+	for (i = 0; i < t_args->load_sz; i ++) {	
+		strkey = malloc(50); 
+		snprintf(strkey, 50, "%d", t_args->allkeys[t_args->start_index + i]);
+		get(t_args->allkeys[t_args->start_index + i], strkey, 0,t_args->tree);
+		free(strkey);
+	}
 	return NULL;
 }
 
-int parallel_get(int key, char *strkey, int num_threads, lsm_tree *tree) {
-	// pthread_t tids[num_threads];
-	// thread_args **inputs = malloc(sizeof(thread_args*) * num_threads);
-	// pthread_create(tids[i], NULL, &parallel_get, inputs[i]);
-	return 0;
-}
 
-int get(int key, char *strkey, lsm_tree *tree) {
+int get(int key, char *strkey, int should_print, lsm_tree *tree) {
 	int curr_level;
 
 	// need a temporary storage location for the key to get
@@ -404,12 +405,14 @@ int get(int key, char *strkey, lsm_tree *tree) {
 		// search for the node
 		// bloom filter search
 		if (tree->blocks[i].curr_size != 0 && key <= tree->blocks[i].hi && key >= tree->blocks[i].lo) {
-			if (bf_search(strkey, tree->blocks[i].bloom_filter) == 0) {
+			if (bf_search(strkey, &tree->blocks[i]) == 0) {
 				continue;
 			}
 			found = bsearch(&keynode, tree->blocks[i].nodes, tree->blocks[i].curr_size, sizeof(node), comparison);
 		    if (found) {
-	    		printf("%d\n", found->val);
+		    	if (should_print)
+	    			printf("%d\n", found->val);
+	    		successful_gets++;
 	    		return 0;
 	    	}
 	    }
@@ -424,23 +427,19 @@ int get(int key, char *strkey, lsm_tree *tree) {
 		// check fence pointers
 		if (tree->disk_blocks[curr_level].curr_size != 0 && key <= tree->disk_blocks[curr_level].hi 
 			&& key >= tree->disk_blocks[curr_level].lo) {
-			// did not find in RAM -- try search on disk
-			disk_buffer = disk_to_buffer(disk_buffer, disk_names[curr_level], tree->disk_blocks[curr_level].curr_size);
-			if (bf_search(strkey, tree->disk_blocks[curr_level].bloom_filter) == 0) {
-				free(disk_buffer);
+			//did not find in RAM -- try search on disk
+			if (bf_search(strkey, &tree->disk_blocks[curr_level]) == 0) {
 				curr_level++;
 				continue;
 			}
-			// search disk nodes
-			if (bf_search(strkey, tree->disk_blocks[curr_level].bloom_filter) == 0) {
-				printf("\n");
-				return -1;
-			}
+			disk_buffer = disk_to_buffer(disk_buffer, disk_names[curr_level], tree->disk_blocks[curr_level].curr_size);
 
 			found = bsearch(&keynode, disk_buffer, tree->disk_blocks[curr_level].curr_size, sizeof(node), comparison);
 		    if (found) {
-		    	printf("%d\n", found->val);
+		    	if (should_print)
+		    		printf("%d\n", found->val);
 		    	free(disk_buffer);
+		    	successful_gets++;
 		    	return 0;
 		    }
 		    free(disk_buffer);
@@ -448,7 +447,9 @@ int get(int key, char *strkey, lsm_tree *tree) {
 		curr_level ++;
 	}
 	// not found
-	printf("\n");
+	if (should_print)
+		printf("\n");
+	failed_gets++;
 	return -1;
 }
 
@@ -482,7 +483,7 @@ int range(int key1, int key2, lsm_tree *tree){
 					}
 				}
 				if (print) {
-					printf("%d:%d\n", tree->blocks[i].nodes[j].key, tree->blocks[i].nodes[j].val);
+					//printf("%d:%d\n", tree->blocks[i].nodes[j].key, tree->blocks[i].nodes[j].val);
 					num_found++;
 					foundlist = realloc(foundlist, sizeof(int) * num_found);
 					foundlist[num_found - 1] = tree->blocks[i].nodes[j].key;
@@ -538,7 +539,7 @@ int range(int key1, int key2, lsm_tree *tree){
 						}
 					}
 					if (print) {
-						printf("%d:%d\n", disk_buffer[i].key, disk_buffer[i].val);
+						//printf("%d:%d\n", disk_buffer[i].key, disk_buffer[i].val);
 						num_found++;
 						foundlist = realloc(foundlist, sizeof(int) * num_found);
 						foundlist[num_found - 1] = disk_buffer[i].key;
@@ -579,6 +580,10 @@ int delete(int key, char *strkey, lsm_tree *tree) {
 		// check if on disk
 		if (access(disk_names[curr_level], F_OK) != -1 && tree->disk_blocks[curr_level].curr_size != 0) {
 			FILE *file = fopen(disk_names[curr_level], "r"); 
+			if (!file) {
+				perror("hi");
+				return -1;
+			}
 			int result; 
 
 			node *disk_buffer = malloc(tree->disk_blocks[curr_level].curr_size  * sizeof(node)); 
@@ -643,6 +648,7 @@ int delete(int key, char *strkey, lsm_tree *tree) {
 int load(char *filename, lsm_tree *tree) {
 	int filelen; 
 	int result; 
+	char strkey[10];
 
 	FILE *file = fopen(filename, "rb");
 	if (!file) {
@@ -679,8 +685,10 @@ int load(char *filename, lsm_tree *tree) {
 	}
 
 	// read pairs of numbers from the buffer into a put query
-	for (int i = 0; i < num_ints; i += 2) 
-		put(buffer[i], buffer[i+1], NULL, tree);
+	for (int i = 0; i < num_ints; i += 2) {
+		snprintf(strkey, 10, "%d", buffer[i]);
+		put(buffer[i], buffer[i+1], strkey, tree);
+	}
 	return 0;
 }
 
